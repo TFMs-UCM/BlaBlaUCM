@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:blablaucm/screens/filter_options.dart';
+import 'package:blablaucm/screens/search_travel_list_view.dart';
 import 'package:blablaucm/models/enums.dart';
 
 class SearchTravelPage extends StatefulWidget {
@@ -13,11 +14,11 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
   DateTime? fromDate;
   DateTime? untilDate;
 
-  UsersType? selectedRole = UsersType.todos;
+  UsersType? selectedRole = UsersType.all;
   double radiusOrigin = 0;
   double radiusDest = 0;
-  EnvSticker? selectedEnvSticker = EnvSticker.todas;
-  TravelType? selectedTravelType = TravelType.todos;
+  EnvSticker? selectedEnvSticker = EnvSticker.all;
+  TravelType? selectedTravelType = TravelType.all;
   List<DriverPreferences>? selectedPreferences = [];
 
 
@@ -27,11 +28,11 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
     @override
   void initState() {
     super.initState();
-    selectedRole = UsersType.todos;
+    selectedRole = UsersType.all;
     radiusOrigin = 0;
     radiusDest = 0;
-    selectedEnvSticker = EnvSticker.todas;
-    selectedTravelType = TravelType.todos;
+    selectedEnvSticker = EnvSticker.all;
+    selectedTravelType = TravelType.all;
     selectedPreferences = [];
   }
 
@@ -172,7 +173,14 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SearchTravelListView(),
+                      ),
+                    );
+                  },
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),

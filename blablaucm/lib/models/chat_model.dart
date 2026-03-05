@@ -12,10 +12,10 @@ class ChatModel{
   });
 
   String get messagePreview{
-    return messages.isEmpty ? "" : messages.last.shortContent;
+    return messages.isEmpty ? "" : messages.last.content.shortContent;
   }
 
   DateTime get lastMessageTime{
-    return messages.isEmpty ? DateTime.fromMillisecondsSinceEpoch(0) : messages.last.timestamp;
+    return messages.isEmpty ? DateTime.fromMillisecondsSinceEpoch(0) : messages.last.content.timestamp;
   }
 }

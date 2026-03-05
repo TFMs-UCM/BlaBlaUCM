@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:blablaucm/screens/home.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
-void main() {
+void main() async{
+  WidgetsFlutterBinding.ensureInitialized(); 
+  await initializeDateFormatting('es_ES', null);
   runApp(
     const ProviderScope( // Para usar Riverpod
       child: MyApp(),
@@ -36,6 +39,7 @@ class MyApp extends StatelessWidget {
         // tested with just a hot reload.
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
+      debugShowCheckedModeBanner: false,
       home: const HomePage(title: 'Flutter Demo Home Page'),
     );
   }

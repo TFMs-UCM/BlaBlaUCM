@@ -11,11 +11,11 @@ class FilterOptionsPage extends StatefulWidget {
 
   const FilterOptionsPage({
     super.key,
-    this.selectedRole = UsersType.todos,
+    this.selectedRole = UsersType.all,
     this.radiusToOrigin = 0,
     this.radiusToDest = 0,
-    this.selectedEnvSticker = EnvSticker.todas,
-    this.selectedTravelType = TravelType.todos,
+    this.selectedEnvSticker = EnvSticker.all,
+    this.selectedTravelType = TravelType.all,
     this.selectedPreferences,
   });
 
@@ -24,11 +24,11 @@ class FilterOptionsPage extends StatefulWidget {
 }
 
 class _FilterOptionsPageState extends State<FilterOptionsPage> {
-  UsersType? selectedRole = UsersType.todos; // Valor inicial para el rol (todos)
+  UsersType? selectedRole = UsersType.all; // Valor inicial para el rol (todos)
   double radiusToOrigin = 0; // Radio al origen valor inicial del slider inf
   double radiusToDest = 0; // Radio al destinovalor inicial del slider inf
-  EnvSticker? selectedEnvSticker = EnvSticker.todas;
-  TravelType? selectedTravelType = TravelType.todos;
+  EnvSticker? selectedEnvSticker = EnvSticker.all;
+  TravelType? selectedTravelType = TravelType.all;
   List<DriverPreferences>? selectedPreferences = [];
 
   @override void initState() { 

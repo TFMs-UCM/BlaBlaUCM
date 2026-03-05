@@ -33,8 +33,8 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
   bool _isNewDay(int index) {
     if (index == 0) return true;
 
-    final previous = messages[index - 1].timestamp;
-    final current = messages[index].timestamp;
+    final previous = messages[index - 1].content.timestamp;
+    final current = messages[index].content.timestamp;
 
     return previous.year != current.year ||
         previous.month != current.month ||
@@ -83,7 +83,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
-                            _formatDate(message.timestamp),
+                            _formatDate(message.content.timestamp),
                             style: const TextStyle(
                                 fontSize: 12, fontWeight: FontWeight.w500),
                           ),
@@ -122,7 +122,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
 
                             /// Contenido
                             Text(
-                              message.content,
+                              message.content.content,
                               style: const TextStyle(fontSize: 16),
                             ),
 
@@ -132,7 +132,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                             Align(
                               alignment: Alignment.bottomRight,
                               child: Text(
-                                _formatTime(message.timestamp),
+                                _formatTime(message.content.timestamp),
                                 style: const TextStyle(
                                   fontSize: 11,
                                   color: Colors.black54,
@@ -177,8 +177,7 @@ class _ChatDetailsScreenState extends State<ChatDetailsScreen> {
                         messages.add(
                           MessageModel(
                             user: "me",
-                            content: _controller.text,
-                            timestamp: DateTime.now(),
+                            content: MessageContent(content: _controller.text, timestamp: DateTime.now())
                           ),
                         );
                       });

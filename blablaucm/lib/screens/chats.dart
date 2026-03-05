@@ -19,8 +19,8 @@ class _ChatsScreenState extends State<ChatsScreen> {
     // =================
     final List<ChatModel> chats = [
       ChatModel(id: "uyruyt - uiytiuy - 9876876", name: "Viaje Madrid 2014 - 2024", messages: [
-        MessageModel(user: "paco", content: "Hola k ase", timestamp: DateTime.now().add(-const Duration(days: 4))),
-        MessageModel(user: "juanlu", content: "Floppa esta tan contento mientras defecaba peras pero luego llego Juanma", timestamp: DateTime.now())]),
+        MessageModel(user: "paco", content: MessageContent(content: "Hola k ase", timestamp: DateTime.now().add(-const Duration(days: 4)))),
+        MessageModel(user: "juanlu", content: MessageContent(content: "Floppa esta tan contento mientras defecaba peras pero luego llego Juanma", timestamp: DateTime.now()))]),
       ChatModel(id: "uyruyt - uiytiuy - ewdfsdf", name: "Viaje Avila 2014 - 2024", messages: []),
       ChatModel(id: "uyruyt - uiytiuy - 987sdw6876", name: "Viaje Mallorca 2014 - 2024", messages: []),
       ChatModel(id: "uyruyt - uiytiuy - wewfds", name: "Viaje Andorra 2014 - 2024", messages: []),
