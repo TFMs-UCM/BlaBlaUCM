@@ -1,7 +1,7 @@
 import 'package:blablaucm/models/enums.dart';
 import 'package:flutter/material.dart';
 import 'package:blablaucm/models/vehicle_model.dart';
-import 'package:blablaucm/screens/vehicle_details.dart';
+import 'package:blablaucm/screens/vehicle_details_profile.dart';
 
 class VehiclesScreen extends StatefulWidget {
   final List<VehicleModel> vehicles;
@@ -110,7 +110,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => VehicleDetailsScreen(
+                          builder: (context) => VehicleDetailsProfileScreen(
                             vehicle: v,
                             onDelete: (veh) {
                               setState(() {
@@ -119,7 +119,8 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                             },
                             onUpdate: (veh) {
                               setState(() {
-                                final index = localVehicles.indexWhere((x) => x.id == veh.id);
+                                final index =
+                                    localVehicles.indexWhere((x) => x.id == veh.id);
                                 if (index != -1) {
                                   localVehicles[index] = veh;
                                 }
