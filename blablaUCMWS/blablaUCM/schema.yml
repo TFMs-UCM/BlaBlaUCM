@@ -1,0 +1,3679 @@
+openapi: 3.0.3
+info:
+  title: ''
+  version: 0.0.0
+paths:
+  /api/v1/auth/refresh/:
+    post:
+      operationId: auth_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/v1/criteria/:
+    get:
+      operationId: criteria_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - criteria
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCriteriaList'
+          description: ''
+    post:
+      operationId: criteria_create
+      tags:
+      - criteria
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Criteria'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Criteria'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Criteria'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Criteria'
+          description: ''
+  /api/v1/criteria/{id}/:
+    get:
+      operationId: criteria_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this criteria.
+        required: true
+      tags:
+      - criteria
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Criteria'
+          description: ''
+    put:
+      operationId: criteria_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this criteria.
+        required: true
+      tags:
+      - criteria
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Criteria'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Criteria'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Criteria'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Criteria'
+          description: ''
+    patch:
+      operationId: criteria_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this criteria.
+        required: true
+      tags:
+      - criteria
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedCriteria'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedCriteria'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedCriteria'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Criteria'
+          description: ''
+    delete:
+      operationId: criteria_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this criteria.
+        required: true
+      tags:
+      - criteria
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/driverratings/:
+    get:
+      operationId: driverratings_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - driverratings
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDriverRatingsList'
+          description: ''
+    post:
+      operationId: driverratings_create
+      tags:
+      - driverratings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverRatings'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DriverRatings'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DriverRatings'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverRatings'
+          description: ''
+  /api/v1/driverratings/{id_rating}/:
+    get:
+      operationId: driverratings_retrieve
+      parameters:
+      - in: path
+        name: id_rating
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this driver ratings.
+        required: true
+      tags:
+      - driverratings
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverRatings'
+          description: ''
+    put:
+      operationId: driverratings_update
+      parameters:
+      - in: path
+        name: id_rating
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this driver ratings.
+        required: true
+      tags:
+      - driverratings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverRatings'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/DriverRatings'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DriverRatings'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverRatings'
+          description: ''
+    patch:
+      operationId: driverratings_partial_update
+      parameters:
+      - in: path
+        name: id_rating
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this driver ratings.
+        required: true
+      tags:
+      - driverratings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDriverRatings'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDriverRatings'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDriverRatings'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverRatings'
+          description: ''
+    delete:
+      operationId: driverratings_destroy
+      parameters:
+      - in: path
+        name: id_rating
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this driver ratings.
+        required: true
+      tags:
+      - driverratings
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/envtypes/:
+    get:
+      operationId: envtypes_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - envtypes
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEnvTypesList'
+          description: ''
+    post:
+      operationId: envtypes_create
+      tags:
+      - envtypes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvTypes'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EnvTypes'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EnvTypes'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvTypes'
+          description: ''
+  /api/v1/envtypes/{id_type}/:
+    get:
+      operationId: envtypes_retrieve
+      parameters:
+      - in: path
+        name: id_type
+        schema:
+          type: integer
+        description: A unique integer value identifying this env types.
+        required: true
+      tags:
+      - envtypes
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvTypes'
+          description: ''
+    put:
+      operationId: envtypes_update
+      parameters:
+      - in: path
+        name: id_type
+        schema:
+          type: integer
+        description: A unique integer value identifying this env types.
+        required: true
+      tags:
+      - envtypes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvTypes'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/EnvTypes'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/EnvTypes'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvTypes'
+          description: ''
+    patch:
+      operationId: envtypes_partial_update
+      parameters:
+      - in: path
+        name: id_type
+        schema:
+          type: integer
+        description: A unique integer value identifying this env types.
+        required: true
+      tags:
+      - envtypes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedEnvTypes'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedEnvTypes'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedEnvTypes'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvTypes'
+          description: ''
+    delete:
+      operationId: envtypes_destroy
+      parameters:
+      - in: path
+        name: id_type
+        schema:
+          type: integer
+        description: A unique integer value identifying this env types.
+        required: true
+      tags:
+      - envtypes
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/login/:
+    post:
+      operationId: login_create
+      description: |-
+        Custom login view that uses the CustomTokenObtainPairSerializer.
+        This allows users to login with either email or username.
+      tags:
+      - login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomTokenObtainPair'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/CustomTokenObtainPair'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CustomTokenObtainPair'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomTokenObtainPair'
+          description: ''
+  /api/v1/media/profile_pics/{filename}:
+    get:
+      operationId: media_profile_pics_retrieve
+      description: |-
+        Serve profile pictures only to authenticated users.
+        This protects profile pictures from public access.
+
+        Usage: GET /api/v1/media/profile_pics/{filename}
+      parameters:
+      - in: path
+        name: filename
+        schema:
+          type: string
+        required: true
+      tags:
+      - media
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/notifications/:
+    get:
+      operationId: notifications_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedNotificationsList'
+          description: ''
+    post:
+      operationId: notifications_create
+      tags:
+      - notifications
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Notifications'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Notifications'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Notifications'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notifications'
+          description: ''
+  /api/v1/notifications/{id}/:
+    get:
+      operationId: notifications_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this notifications.
+        required: true
+      tags:
+      - notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notifications'
+          description: ''
+    put:
+      operationId: notifications_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this notifications.
+        required: true
+      tags:
+      - notifications
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Notifications'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Notifications'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Notifications'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notifications'
+          description: ''
+    patch:
+      operationId: notifications_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this notifications.
+        required: true
+      tags:
+      - notifications
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedNotifications'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedNotifications'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedNotifications'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notifications'
+          description: ''
+    delete:
+      operationId: notifications_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this notifications.
+        required: true
+      tags:
+      - notifications
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/pickuppoints/:
+    get:
+      operationId: pickuppoints_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - pickuppoints
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPickUpPointList'
+          description: ''
+    post:
+      operationId: pickuppoints_create
+      tags:
+      - pickuppoints
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PickUpPoint'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PickUpPoint'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PickUpPoint'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickUpPoint'
+          description: ''
+  /api/v1/pickuppoints/{id_point}/:
+    get:
+      operationId: pickuppoints_retrieve
+      parameters:
+      - in: path
+        name: id_point
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this pick up points.
+        required: true
+      tags:
+      - pickuppoints
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickUpPoint'
+          description: ''
+    put:
+      operationId: pickuppoints_update
+      parameters:
+      - in: path
+        name: id_point
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this pick up points.
+        required: true
+      tags:
+      - pickuppoints
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PickUpPoint'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PickUpPoint'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PickUpPoint'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickUpPoint'
+          description: ''
+    patch:
+      operationId: pickuppoints_partial_update
+      parameters:
+      - in: path
+        name: id_point
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this pick up points.
+        required: true
+      tags:
+      - pickuppoints
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPickUpPoint'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPickUpPoint'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPickUpPoint'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PickUpPoint'
+          description: ''
+    delete:
+      operationId: pickuppoints_destroy
+      parameters:
+      - in: path
+        name: id_point
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this pick up points.
+        required: true
+      tags:
+      - pickuppoints
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/preferences/:
+    get:
+      operationId: preferences_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - preferences
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPreferencesList'
+          description: ''
+    post:
+      operationId: preferences_create
+      tags:
+      - preferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Preferences'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Preferences'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Preferences'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preferences'
+          description: ''
+  /api/v1/preferences/{id_pref}/:
+    get:
+      operationId: preferences_retrieve
+      parameters:
+      - in: path
+        name: id_pref
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this preferences.
+        required: true
+      tags:
+      - preferences
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preferences'
+          description: ''
+    put:
+      operationId: preferences_update
+      parameters:
+      - in: path
+        name: id_pref
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this preferences.
+        required: true
+      tags:
+      - preferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Preferences'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Preferences'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Preferences'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preferences'
+          description: ''
+    patch:
+      operationId: preferences_partial_update
+      parameters:
+      - in: path
+        name: id_pref
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this preferences.
+        required: true
+      tags:
+      - preferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPreferences'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPreferences'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPreferences'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preferences'
+          description: ''
+    delete:
+      operationId: preferences_destroy
+      parameters:
+      - in: path
+        name: id_pref
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this preferences.
+        required: true
+      tags:
+      - preferences
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/preftypes/:
+    get:
+      operationId: preftypes_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - preftypes
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPrefTypesList'
+          description: ''
+    post:
+      operationId: preftypes_create
+      tags:
+      - preftypes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrefTypes'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PrefTypes'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PrefTypes'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrefTypes'
+          description: ''
+  /api/v1/preftypes/{id_pref}/:
+    get:
+      operationId: preftypes_retrieve
+      parameters:
+      - in: path
+        name: id_pref
+        schema:
+          type: integer
+        description: A unique integer value identifying this pref types.
+        required: true
+      tags:
+      - preftypes
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrefTypes'
+          description: ''
+    put:
+      operationId: preftypes_update
+      parameters:
+      - in: path
+        name: id_pref
+        schema:
+          type: integer
+        description: A unique integer value identifying this pref types.
+        required: true
+      tags:
+      - preftypes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrefTypes'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PrefTypes'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PrefTypes'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrefTypes'
+          description: ''
+    patch:
+      operationId: preftypes_partial_update
+      parameters:
+      - in: path
+        name: id_pref
+        schema:
+          type: integer
+        description: A unique integer value identifying this pref types.
+        required: true
+      tags:
+      - preftypes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedPrefTypes'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedPrefTypes'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedPrefTypes'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrefTypes'
+          description: ''
+    delete:
+      operationId: preftypes_destroy
+      parameters:
+      - in: path
+        name: id_pref
+        schema:
+          type: integer
+        description: A unique integer value identifying this pref types.
+        required: true
+      tags:
+      - preftypes
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/register/:
+    post:
+      operationId: register_create
+      description: |-
+        User registration endpoint.
+        POST data should include:
+        - username: unique username
+        - email: unique email
+        - password: password (min 6 characters)
+        - password_confirm: password confirmation
+        - name: first name
+        - surname1: first surname
+        - surname2: second surname (optional)
+        - user_type: user type ID
+      tags:
+      - register
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/requeststates/:
+    get:
+      operationId: requeststates_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - requeststates
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRequestStatesList'
+          description: ''
+    post:
+      operationId: requeststates_create
+      tags:
+      - requeststates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestStates'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RequestStates'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RequestStates'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestStates'
+          description: ''
+  /api/v1/requeststates/{id_state}/:
+    get:
+      operationId: requeststates_retrieve
+      parameters:
+      - in: path
+        name: id_state
+        schema:
+          type: integer
+        description: A unique integer value identifying this request states.
+        required: true
+      tags:
+      - requeststates
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestStates'
+          description: ''
+    put:
+      operationId: requeststates_update
+      parameters:
+      - in: path
+        name: id_state
+        schema:
+          type: integer
+        description: A unique integer value identifying this request states.
+        required: true
+      tags:
+      - requeststates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestStates'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RequestStates'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RequestStates'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestStates'
+          description: ''
+    patch:
+      operationId: requeststates_partial_update
+      parameters:
+      - in: path
+        name: id_state
+        schema:
+          type: integer
+        description: A unique integer value identifying this request states.
+        required: true
+      tags:
+      - requeststates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRequestStates'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedRequestStates'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedRequestStates'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestStates'
+          description: ''
+    delete:
+      operationId: requeststates_destroy
+      parameters:
+      - in: path
+        name: id_state
+        schema:
+          type: integer
+        description: A unique integer value identifying this request states.
+        required: true
+      tags:
+      - requeststates
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/requesttravel/:
+    get:
+      operationId: requesttravel_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - requesttravel
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRequestTravelsList'
+          description: ''
+    post:
+      operationId: requesttravel_create
+      tags:
+      - requesttravel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestTravels'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RequestTravels'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RequestTravels'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestTravels'
+          description: ''
+  /api/v1/requesttravel/{id}/:
+    get:
+      operationId: requesttravel_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this request travels.
+        required: true
+      tags:
+      - requesttravel
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestTravels'
+          description: ''
+    put:
+      operationId: requesttravel_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this request travels.
+        required: true
+      tags:
+      - requesttravel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequestTravels'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RequestTravels'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RequestTravels'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestTravels'
+          description: ''
+    patch:
+      operationId: requesttravel_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this request travels.
+        required: true
+      tags:
+      - requesttravel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRequestTravels'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedRequestTravels'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedRequestTravels'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestTravels'
+          description: ''
+    delete:
+      operationId: requesttravel_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this request travels.
+        required: true
+      tags:
+      - requesttravel
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/schema/:
+    get:
+      operationId: schema_retrieve
+      description: |-
+        OpenApi3 schema for this API. Format can be selected via content negotiation.
+
+        - YAML: application/vnd.oai.openapi
+        - JSON: application/vnd.oai.openapi+json
+      parameters:
+      - in: query
+        name: format
+        schema:
+          type: string
+          enum:
+          - json
+          - yaml
+      - in: query
+        name: lang
+        schema:
+          type: string
+          enum:
+          - af
+          - ar
+          - ar-dz
+          - ast
+          - az
+          - be
+          - bg
+          - bn
+          - br
+          - bs
+          - ca
+          - ckb
+          - cs
+          - cy
+          - da
+          - de
+          - dsb
+          - el
+          - en
+          - en-au
+          - en-gb
+          - eo
+          - es
+          - es-ar
+          - es-co
+          - es-mx
+          - es-ni
+          - es-ve
+          - et
+          - eu
+          - fa
+          - fi
+          - fr
+          - fy
+          - ga
+          - gd
+          - gl
+          - he
+          - hi
+          - hr
+          - hsb
+          - ht
+          - hu
+          - hy
+          - ia
+          - id
+          - ig
+          - io
+          - is
+          - it
+          - ja
+          - ka
+          - kab
+          - kk
+          - km
+          - kn
+          - ko
+          - ky
+          - lb
+          - lt
+          - lv
+          - mk
+          - ml
+          - mn
+          - mr
+          - ms
+          - my
+          - nb
+          - ne
+          - nl
+          - nn
+          - os
+          - pa
+          - pl
+          - pt
+          - pt-br
+          - ro
+          - ru
+          - sk
+          - sl
+          - sq
+          - sr
+          - sr-latn
+          - sv
+          - sw
+          - ta
+          - te
+          - tg
+          - th
+          - tk
+          - tr
+          - tt
+          - udm
+          - ug
+          - uk
+          - ur
+          - uz
+          - vi
+          - zh-hans
+          - zh-hant
+      tags:
+      - schema
+      security:
+      - jwtAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/vnd.oai.openapi:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/yaml:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/vnd.oai.openapi+json:
+              schema:
+                type: object
+                additionalProperties: {}
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+          description: ''
+  /api/v1/travel/:
+    get:
+      operationId: travel_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - travel
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTravelList'
+          description: ''
+    post:
+      operationId: travel_create
+      tags:
+      - travel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Travel'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Travel'
+          description: ''
+  /api/v1/travel/{id_travel}/:
+    get:
+      operationId: travel_retrieve
+      parameters:
+      - in: path
+        name: id_travel
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this travel.
+        required: true
+      tags:
+      - travel
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Travel'
+          description: ''
+    put:
+      operationId: travel_update
+      parameters:
+      - in: path
+        name: id_travel
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this travel.
+        required: true
+      tags:
+      - travel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Travel'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Travel'
+          description: ''
+    patch:
+      operationId: travel_partial_update
+      parameters:
+      - in: path
+        name: id_travel
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this travel.
+        required: true
+      tags:
+      - travel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTravel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTravel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTravel'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Travel'
+          description: ''
+    delete:
+      operationId: travel_destroy
+      parameters:
+      - in: path
+        name: id_travel
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this travel.
+        required: true
+      tags:
+      - travel
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/travelstates/:
+    get:
+      operationId: travelstates_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - travelstates
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTravelStatesList'
+          description: ''
+    post:
+      operationId: travelstates_create
+      tags:
+      - travelstates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TravelStates'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TravelStates'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TravelStates'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TravelStates'
+          description: ''
+  /api/v1/travelstates/{id_state}/:
+    get:
+      operationId: travelstates_retrieve
+      parameters:
+      - in: path
+        name: id_state
+        schema:
+          type: integer
+        description: A unique integer value identifying this travel states.
+        required: true
+      tags:
+      - travelstates
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TravelStates'
+          description: ''
+    put:
+      operationId: travelstates_update
+      parameters:
+      - in: path
+        name: id_state
+        schema:
+          type: integer
+        description: A unique integer value identifying this travel states.
+        required: true
+      tags:
+      - travelstates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TravelStates'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TravelStates'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TravelStates'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TravelStates'
+          description: ''
+    patch:
+      operationId: travelstates_partial_update
+      parameters:
+      - in: path
+        name: id_state
+        schema:
+          type: integer
+        description: A unique integer value identifying this travel states.
+        required: true
+      tags:
+      - travelstates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTravelStates'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTravelStates'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTravelStates'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TravelStates'
+          description: ''
+    delete:
+      operationId: travelstates_destroy
+      parameters:
+      - in: path
+        name: id_state
+        schema:
+          type: integer
+        description: A unique integer value identifying this travel states.
+        required: true
+      tags:
+      - travelstates
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/users/:
+    get:
+      operationId: users_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserList'
+          description: ''
+    post:
+      operationId: users_create
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/:
+    get:
+      operationId: users_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    put:
+      operationId: users_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    patch:
+      operationId: users_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    delete:
+      operationId: users_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/users/{id}/upload-profile_picture/:
+    patch:
+      operationId: users_upload_profile_picture_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/usertypes/:
+    get:
+      operationId: usertypes_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - usertypes
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserTypeList'
+          description: ''
+    post:
+      operationId: usertypes_create
+      tags:
+      - usertypes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserType'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserType'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserType'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserType'
+          description: ''
+  /api/v1/usertypes/{id_type}/:
+    get:
+      operationId: usertypes_retrieve
+      parameters:
+      - in: path
+        name: id_type
+        schema:
+          type: integer
+        description: A unique integer value identifying this user type.
+        required: true
+      tags:
+      - usertypes
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserType'
+          description: ''
+    put:
+      operationId: usertypes_update
+      parameters:
+      - in: path
+        name: id_type
+        schema:
+          type: integer
+        description: A unique integer value identifying this user type.
+        required: true
+      tags:
+      - usertypes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserType'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserType'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserType'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserType'
+          description: ''
+    patch:
+      operationId: usertypes_partial_update
+      parameters:
+      - in: path
+        name: id_type
+        schema:
+          type: integer
+        description: A unique integer value identifying this user type.
+        required: true
+      tags:
+      - usertypes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserType'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserType'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserType'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserType'
+          description: ''
+    delete:
+      operationId: usertypes_destroy
+      parameters:
+      - in: path
+        name: id_type
+        schema:
+          type: integer
+        description: A unique integer value identifying this user type.
+        required: true
+      tags:
+      - usertypes
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/v1/vehicles/:
+    get:
+      operationId: vehicles_list
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - vehicles
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVehicleList'
+          description: ''
+    post:
+      operationId: vehicles_create
+      tags:
+      - vehicles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Vehicle'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Vehicle'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Vehicle'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+          description: ''
+  /api/v1/vehicles/{id_vehicle}/:
+    get:
+      operationId: vehicles_retrieve
+      parameters:
+      - in: path
+        name: id_vehicle
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this vehicles.
+        required: true
+      tags:
+      - vehicles
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+          description: ''
+    put:
+      operationId: vehicles_update
+      parameters:
+      - in: path
+        name: id_vehicle
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this vehicles.
+        required: true
+      tags:
+      - vehicles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Vehicle'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Vehicle'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Vehicle'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+          description: ''
+    patch:
+      operationId: vehicles_partial_update
+      parameters:
+      - in: path
+        name: id_vehicle
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this vehicles.
+        required: true
+      tags:
+      - vehicles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedVehicle'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedVehicle'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedVehicle'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+          description: ''
+    delete:
+      operationId: vehicles_destroy
+      parameters:
+      - in: path
+        name: id_vehicle
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this vehicles.
+        required: true
+      tags:
+      - vehicles
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+components:
+  schemas:
+    Criteria:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          maxLength: 8
+        description:
+          type: string
+          maxLength: 100
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - code
+      - created_at
+      - description
+      - id
+      - updated_at
+    CustomTokenObtainPair:
+      type: object
+      description: |-
+        Custom serializer for JWT token obtain that uses email or username with password.
+        Accepts either 'username' or 'email' along with 'password'.
+      properties:
+        username:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - password
+      - username
+    DriverRatings:
+      type: object
+      properties:
+        id_rating:
+          type: string
+          format: uuid
+          readOnly: true
+        score:
+          type: integer
+          maximum: 10
+          minimum: 0
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        id_user:
+          type: string
+          format: uuid
+        id_driver:
+          type: string
+          format: uuid
+        criteria:
+          type: integer
+      required:
+      - created_at
+      - criteria
+      - id_driver
+      - id_rating
+      - id_user
+      - score
+      - updated_at
+    EnvTypes:
+      type: object
+      properties:
+        id_type:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          maxLength: 10
+        label:
+          type: string
+          maxLength: 20
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - code
+      - created_at
+      - id_type
+      - label
+      - updated_at
+    Notifications:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        content:
+          type: string
+          maxLength: 300
+        date:
+          type: string
+          format: date-time
+          readOnly: true
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        id_user:
+          type: string
+          format: uuid
+      required:
+      - content
+      - created_at
+      - date
+      - id
+      - id_user
+      - updated_at
+    PaginatedCriteriaList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Criteria'
+    PaginatedDriverRatingsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriverRatings'
+    PaginatedEnvTypesList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnvTypes'
+    PaginatedNotificationsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notifications'
+    PaginatedPickUpPointList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PickUpPoint'
+    PaginatedPrefTypesList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrefTypes'
+    PaginatedPreferencesList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Preferences'
+    PaginatedRequestStatesList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequestStates'
+    PaginatedRequestTravelsList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequestTravels'
+    PaginatedTravelList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Travel'
+    PaginatedTravelStatesList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TravelStates'
+    PaginatedUserList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+    PaginatedUserTypeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserType'
+    PaginatedVehicleList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Vehicle'
+    PatchedCriteria:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          maxLength: 8
+        description:
+          type: string
+          maxLength: 100
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+    PatchedDriverRatings:
+      type: object
+      properties:
+        id_rating:
+          type: string
+          format: uuid
+          readOnly: true
+        score:
+          type: integer
+          maximum: 10
+          minimum: 0
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        id_user:
+          type: string
+          format: uuid
+        id_driver:
+          type: string
+          format: uuid
+        criteria:
+          type: integer
+    PatchedEnvTypes:
+      type: object
+      properties:
+        id_type:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          maxLength: 10
+        label:
+          type: string
+          maxLength: 20
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+    PatchedNotifications:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        content:
+          type: string
+          maxLength: 300
+        date:
+          type: string
+          format: date-time
+          readOnly: true
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        id_user:
+          type: string
+          format: uuid
+    PatchedPickUpPoint:
+      type: object
+      properties:
+        id_point:
+          type: string
+          format: uuid
+          readOnly: true
+        direction:
+          type: string
+          maxLength: 100
+        order_in_travel:
+          type: integer
+          maximum: 100
+          minimum: 0
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        id_travel:
+          type: string
+          format: uuid
+    PatchedPrefTypes:
+      type: object
+      properties:
+        id_pref:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          maxLength: 8
+        description:
+          type: string
+          maxLength: 50
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+    PatchedPreferences:
+      type: object
+      properties:
+        id_pref:
+          type: string
+          format: uuid
+          readOnly: true
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        id_user:
+          type: string
+          format: uuid
+        pref_type:
+          type: integer
+    PatchedRequestStates:
+      type: object
+      properties:
+        id_state:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          maxLength: 8
+        description:
+          type: string
+          maxLength: 50
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+    PatchedRequestTravels:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        id_travel:
+          type: string
+          format: uuid
+        user:
+          type: string
+          format: uuid
+        status:
+          type: integer
+    PatchedTravel:
+      type: object
+      properties:
+        id_travel:
+          type: string
+          format: uuid
+          readOnly: true
+        periodic_interval:
+          type: integer
+          maximum: 31
+          minimum: 1
+          nullable: true
+        is_periodic:
+          type: boolean
+        origin:
+          type: string
+          maxLength: 50
+        destination:
+          type: string
+          maxLength: 50
+        duration_minutes:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        num_seats:
+          type: integer
+          maximum: 10
+          minimum: 1
+        remaining_seats:
+          type: integer
+          maximum: 10
+          minimum: 0
+        travel_date:
+          type: string
+          format: date
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        creation_user:
+          type: string
+          format: uuid
+        state:
+          type: integer
+        id_origin_travel:
+          type: string
+          format: uuid
+          nullable: true
+        vehicle:
+          type: string
+          format: uuid
+    PatchedTravelStates:
+      type: object
+      properties:
+        id_state:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          maxLength: 8
+        description:
+          type: string
+          maxLength: 50
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+    PatchedUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        username:
+          type: string
+          maxLength: 20
+        email:
+          type: string
+          format: email
+          maxLength: 60
+        name:
+          type: string
+          maxLength: 50
+        surname1:
+          type: string
+          maxLength: 50
+        surname2:
+          type: string
+          nullable: true
+          maxLength: 50
+        user_type:
+          type: integer
+        profile_picture_url:
+          type: string
+          readOnly: true
+    PatchedUserType:
+      type: object
+      properties:
+        id_type:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          maxLength: 8
+        name:
+          type: string
+          maxLength: 50
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+    PatchedVehicle:
+      type: object
+      properties:
+        id_vehicle:
+          type: string
+          format: uuid
+          readOnly: true
+        brand:
+          type: string
+          maxLength: 50
+        model:
+          type: string
+          maxLength: 50
+        license_plate:
+          type: string
+          maxLength: 10
+        color:
+          type: string
+          maxLength: 20
+        seats:
+          type: integer
+          maximum: 10
+          minimum: 2
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        id_user:
+          type: string
+          format: uuid
+        env_sticker:
+          type: integer
+    PickUpPoint:
+      type: object
+      properties:
+        id_point:
+          type: string
+          format: uuid
+          readOnly: true
+        direction:
+          type: string
+          maxLength: 100
+        order_in_travel:
+          type: integer
+          maximum: 100
+          minimum: 0
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        id_travel:
+          type: string
+          format: uuid
+      required:
+      - created_at
+      - direction
+      - id_point
+      - id_travel
+      - order_in_travel
+      - updated_at
+    PrefTypes:
+      type: object
+      properties:
+        id_pref:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          maxLength: 8
+        description:
+          type: string
+          maxLength: 50
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - code
+      - created_at
+      - description
+      - id_pref
+      - updated_at
+    Preferences:
+      type: object
+      properties:
+        id_pref:
+          type: string
+          format: uuid
+          readOnly: true
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        id_user:
+          type: string
+          format: uuid
+        pref_type:
+          type: integer
+      required:
+      - created_at
+      - id_pref
+      - id_user
+      - pref_type
+      - updated_at
+    RequestStates:
+      type: object
+      properties:
+        id_state:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          maxLength: 8
+        description:
+          type: string
+          maxLength: 50
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - code
+      - created_at
+      - description
+      - id_state
+      - updated_at
+    RequestTravels:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        id_travel:
+          type: string
+          format: uuid
+        user:
+          type: string
+          format: uuid
+        status:
+          type: integer
+      required:
+      - created_at
+      - id
+      - id_travel
+      - status
+      - updated_at
+      - user
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+      required:
+      - access
+      - refresh
+    Travel:
+      type: object
+      properties:
+        id_travel:
+          type: string
+          format: uuid
+          readOnly: true
+        periodic_interval:
+          type: integer
+          maximum: 31
+          minimum: 1
+          nullable: true
+        is_periodic:
+          type: boolean
+        origin:
+          type: string
+          maxLength: 50
+        destination:
+          type: string
+          maxLength: 50
+        duration_minutes:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+        num_seats:
+          type: integer
+          maximum: 10
+          minimum: 1
+        remaining_seats:
+          type: integer
+          maximum: 10
+          minimum: 0
+        travel_date:
+          type: string
+          format: date
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        creation_user:
+          type: string
+          format: uuid
+        state:
+          type: integer
+        id_origin_travel:
+          type: string
+          format: uuid
+          nullable: true
+        vehicle:
+          type: string
+          format: uuid
+      required:
+      - created_at
+      - creation_user
+      - destination
+      - duration_minutes
+      - id_travel
+      - num_seats
+      - origin
+      - remaining_seats
+      - state
+      - travel_date
+      - updated_at
+      - vehicle
+    TravelStates:
+      type: object
+      properties:
+        id_state:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          maxLength: 8
+        description:
+          type: string
+          maxLength: 50
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - code
+      - created_at
+      - description
+      - id_state
+      - updated_at
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        username:
+          type: string
+          maxLength: 20
+        email:
+          type: string
+          format: email
+          maxLength: 60
+        name:
+          type: string
+          maxLength: 50
+        surname1:
+          type: string
+          maxLength: 50
+        surname2:
+          type: string
+          nullable: true
+          maxLength: 50
+        user_type:
+          type: integer
+        profile_picture_url:
+          type: string
+          readOnly: true
+      required:
+      - email
+      - id
+      - name
+      - profile_picture_url
+      - surname1
+      - user_type
+      - username
+    UserType:
+      type: object
+      properties:
+        id_type:
+          type: integer
+          readOnly: true
+        code:
+          type: string
+          maxLength: 8
+        name:
+          type: string
+          maxLength: 50
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+      - code
+      - created_at
+      - id_type
+      - name
+      - updated_at
+    Vehicle:
+      type: object
+      properties:
+        id_vehicle:
+          type: string
+          format: uuid
+          readOnly: true
+        brand:
+          type: string
+          maxLength: 50
+        model:
+          type: string
+          maxLength: 50
+        license_plate:
+          type: string
+          maxLength: 10
+        color:
+          type: string
+          maxLength: 20
+        seats:
+          type: integer
+          maximum: 10
+          minimum: 2
+        is_deleted:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+        id_user:
+          type: string
+          format: uuid
+        env_sticker:
+          type: integer
+      required:
+      - brand
+      - color
+      - created_at
+      - env_sticker
+      - id_user
+      - id_vehicle
+      - license_plate
+      - model
+      - seats
+      - updated_at
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

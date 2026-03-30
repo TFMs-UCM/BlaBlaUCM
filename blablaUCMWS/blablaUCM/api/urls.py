@@ -4,6 +4,7 @@ from api.views.user_views import UsersViewSet, UserTypeViewSet, VehiclesViewSet,
     NotificationsViewSet, PrefTypesViewSet, PreferencesViewSet, CriteriaViewSet, \
     DriverRatingsViewSet, EnvTypesViewSet
 from api.views.travel_views import TravelStatesViewSet, TravelViewSet, RequestStatesViewSet, RequestTravelsViewSet, PickUpPointsViewSet
+from api.views.media_views import serve_protected_profile_picture
 
 
 userRouter = routers.DefaultRouter()
@@ -28,25 +29,6 @@ travelRouter.register(r"pickuppoints", PickUpPointsViewSet, basename="pickuppoin
 urlpatterns = [
     path('', include(userRouter.urls)),
     path('', include(travelRouter.urls)),
+    # Protected media serving
+    path('media/profile_pics/<str:filename>', serve_protected_profile_picture, name='protected_profile_pic'),
 ]
-
-
-
-
-# userRouter = routers.DefaultRouter()
-# userRouter.register(r"users", UsersViewSet)
-
-# userTypeRouter = routers.DefaultRouter()
-# userTypeRouter.register(r"usertypes", UserTypeViewSet)
-
-# vehiclesRouter = routers.DefaultRouter()
-# vehiclesRouter.register(r"vehicles", VehiclesViewSet)
-
-# urlpatterns = [
-
-#     path('', include(userRouter.urls)),
-#     path('', include(userTypeRouter.urls)),
-#     path('', include(vehiclesRouter.urls)),
-#     path("travels/", TravelView.as_view()),
-# ]
-

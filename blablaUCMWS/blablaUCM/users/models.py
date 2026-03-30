@@ -1,7 +1,9 @@
 import uuid
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
 from django.db.models import Q
+from django.contrib.auth.hashers import make_password, check_password
 
 """
     Represents the different roles or categories that a user can have
@@ -34,6 +36,28 @@ class UserType(models.Model):
         ]
         
 """
+    Function to name the profiel pictures with a uuid to avoid errors
+"""
+def user_profile_path(instance, filename):
+    ext = filename.split('.')[-1]
+    return f"profile_pics/{uuid.uuid4()}.{ext}"
+
+"""
+    Function to check that the file size is less than 2MB
+"""
+def validate_size(file):
+    max_size = 2 * 1024 * 1024  # 2 MB
+    if file.size > max_size:
+        raise ValidationError("La imagen es demasiado grande")
+
+"""
+    Function to check that the file an image file
+"""
+def validate_image(file):
+    if not file.content_type.startswith('image/'):
+        raise ValidationError("El archivo debe ser una imagen")
+
+"""
     Represents the main user entity of the system.
 """
 class Users(models.Model):
@@ -44,13 +68,19 @@ class Users(models.Model):
         db_column='id_user'
     )
     username = models.CharField(max_length=20, unique=True)
-    email = models.EmailField(max_length=60)
+    email = models.EmailField(max_length=60, unique=True)
     password = models.TextField(null=True, blank=True) # it can be null if user authenticates with Google
     name = models.CharField(max_length=50)
     surname1 = models.CharField(max_length=50)
     surname2 = models.CharField(max_length=50, null=True, blank=True)
     token = models.TextField(null=True, blank=True)
-    prof_pic_path = models.CharField(max_length=30, null=True, blank=True)
+    profile_picture = models.ImageField(
+        upload_to=user_profile_path,
+        validators=[validate_image, validate_size],
+        null=True,
+        blank=True
+    )
+
 
     user_type = models.ForeignKey(
         'UserType',
@@ -75,6 +105,27 @@ class Users(models.Model):
 
     def __str__(self):
         return self.username
+
+    @property
+    def is_authenticated(self):
+        return True
+
+    @property
+    def is_active(self):
+        return not self.is_deleted
+
+    def set_password(self, raw_password):
+        """Hash and set the password"""
+        if raw_password:
+            self.password = make_password(raw_password)
+        else:
+            self.password = None
+
+    def check_password(self, raw_password):
+        """Check if the provided password matches the stored hash"""
+        if not self.password or not raw_password:
+            return False
+        return check_password(raw_password, self.password)
 
 """
     Represents notifications sent to users.

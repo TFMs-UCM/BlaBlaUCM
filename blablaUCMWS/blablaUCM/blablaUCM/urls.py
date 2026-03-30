@@ -16,8 +16,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
+from api.views.auth_views import CustomTokenObtainPairView, register_view
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -25,12 +28,15 @@ urlpatterns = [
     # Versionado de la API
     path('api/v1/', include('api.urls')),  
 
-    # JWT auth
-    path('api/v1/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    # JWT auth - Custom login endpoint
+    path('api/v1/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/v1/register/', register_view, name='register'),
     path('api/v1/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
     # Esquema y docs
     path('api/v1/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/v1/docs/', SpectacularSwaggerView.as_view(url_name='schema')),
 ]
+# To serve pictures without authentication
+#+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
