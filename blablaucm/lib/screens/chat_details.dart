@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:blablaucm/models/message_model.dart';
-
+// Pantalla para mostrar el detalle de un chat, futura implementacion
 class ChatDetailsScreen extends StatefulWidget {
   final List<MessageModel> messages;
   final String? chatId;

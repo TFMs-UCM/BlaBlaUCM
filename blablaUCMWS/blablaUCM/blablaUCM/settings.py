@@ -27,7 +27,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=False, cast=bool)
+DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=lambda v: v.split(','))
 
@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'django_filters',
     'drf_spectacular',
     'users.apps.UsersConfig',
+    'django.contrib.gis',
     
     'travels',
 ]
@@ -132,18 +133,13 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
 ]
 
+EMAIL_BACKEND = config('EMAIL_BACKEND')
+EMAIL_HOST = config('EMAIL_HOST')
+EMAIL_PORT = config('EMAIL_PORT', cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', cast=bool)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 
-# Database
-# https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-
-# Por defecto en Django
-
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
 
 DATABASES = {
     'default': {
@@ -282,3 +278,11 @@ LOGGING = {
         'level': 'DEBUG',
     },
 }
+
+if os.name == 'nt':
+    OSGEO4W_DIR = config('OSGEO4W_DIR')
+
+    GDAL_LIBRARY_PATH = os.path.join(OSGEO4W_DIR, config('GDAL_DLL', default=r"bin\gdal312.dll"))
+    GEOS_LIBRARY_PATH = os.path.join(OSGEO4W_DIR, config('GEOS_DLL', default=r"bin\geos_c.dll"))
+
+    os.environ['PATH'] = os.path.join(OSGEO4W_DIR, "bin") + ";" + os.environ['PATH']

@@ -2,8 +2,8 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
-from rest_framework_simplejwt.views import TokenObtainPairView
-from api.serializers.login_serializer import CustomTokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from api.serializers.login_serializer import CustomTokenObtainPairSerializer, CustomTokenRefreshSerializer
 from api.serializers.user_serializer import UserRegistrationSerializer
 import logging
 
@@ -11,52 +11,40 @@ logger = logging.getLogger(__name__)
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """
-    Custom login view that uses the CustomTokenObtainPairSerializer.
-    This allows users to login with either email or username.
+    Endpoint para iniciar sesión con email o nombre de usuario, no requiere autenticacion previa.
     """
     serializer_class = CustomTokenObtainPairSerializer
     permission_classes = [AllowAny]
 
 
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def login_view(request):
+class CustomTokenRefreshView(TokenRefreshView):
     """
-    Login endpointusing user and password.
-    POST data should include:
-    - username: email or username
-    - password: user password
+    Endpoint para pedir el refresh token, no requiere de autenticacion previa.
     """
-    logger.info("Try to login the user: %s", request.data)
-    serializer = CustomTokenObtainPairSerializer(data=request.data)
-    if serializer.is_valid():
-        logger.info("Login successful for user: %s", request.data)
-        return Response(serializer.validated_data, status=status.HTTP_200_OK)
-    logger.warning("Login failed for user: %s", request.data)
-    return Response(serializer.errors, status=status.HTTP_401_UNAUTHORIZED)
-
+    serializer_class = CustomTokenRefreshSerializer
+    permission_classes = [AllowAny]
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_view(request):
     """
-    User registration endpoint.
-    POST data should include:
-    - username: unique username
-    - email: unique email
-    - password: password (min 6 characters)
-    - password_confirm: password confirmation
-    - name: first name
-    - surname1: first surname
-    - surname2: second surname (optional)
-    - user_type: user type ID
+    Endpoint para el registro de usuarios.
+    El POST debe incluir:
+    - username: nombre de usuario
+    - email: email único
+    - password: contraseña (mínimo 6 caracteres)
+    - password_confirm: confirmación de contraseña
+    - name: nombre
+    - surname1: primer apellido
+    - surname2: segundo apellido (opcional)
+    - user_type: ID del tipo de usuario
     """
     logger.info("Try to register the user: %s", request.data.get("username"))
     serializer = UserRegistrationSerializer(data=request.data)
-    if serializer.is_valid():
+    if serializer.is_valid(): # Si ha pasado la validacion, se crea el usaurio
         user = serializer.save()
         logger.info("User registered successfully: %s", user.id)
-        return Response({
+        return Response({ # Se devuelven los datos del usuario 
             'message': 'User registered successfully',
             'user': {
                 'id': str(user.id),

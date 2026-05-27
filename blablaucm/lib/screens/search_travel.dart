@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:blablaucm/screens/filter_options.dart';
 import 'package:blablaucm/screens/search_travel_list_view.dart';
 import 'package:blablaucm/models/enums.dart';
+import 'package:blablaucm/services/google_places_service.dart';
+import 'package:blablaucm/screens/place_search_field.dart';
+
+// Pantalla de busqueda de viajes, esta es la pagina principal de busquedas donde se introducen los datos de busqueda (origen, destino, y fechas)
+// Ademas llama a la pantalla de filtros para filtrar los viajes
 
 class SearchTravelPage extends StatefulWidget {
   const SearchTravelPage({super.key});
@@ -11,24 +16,37 @@ class SearchTravelPage extends StatefulWidget {
 }
 
 class _SearchTravelPageState extends State<SearchTravelPage> {
+  // Variable del servicio de Google places para el autocompletado y sacar las coordenadas de los lugares
+  final GooglePlacesService placesService = GooglePlacesService();
+
   DateTime? fromDate;
   DateTime? untilDate;
 
-  UsersType? selectedRole = UsersType.all;
+  List<UsersType>? selectedRole = [];
   double radiusOrigin = 0;
   double radiusDest = 0;
   EnvSticker? selectedEnvSticker = EnvSticker.all;
   TravelType? selectedTravelType = TravelType.all;
   List<DriverPreferences>? selectedPreferences = [];
 
-
+  // Controladores de texto de los campos del formulario
+  final TextEditingController _originController = TextEditingController();
+  final TextEditingController _destinationController = TextEditingController();
   final TextEditingController _fromController = TextEditingController();
   final TextEditingController _untilController = TextEditingController();
 
-    @override
+  double? originLat;
+  double? originLng;
+  double? destLat;
+  double? destLng;
+
+  String? errorMessage;
+
+  @override
   void initState() {
+    // Al cargar la pantalla, se inicializan las variables
     super.initState();
-    selectedRole = UsersType.all;
+    selectedRole = [];
     radiusOrigin = 0;
     radiusDest = 0;
     selectedEnvSticker = EnvSticker.all;
@@ -36,30 +54,56 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
     selectedPreferences = [];
   }
 
-
+  // Funcion para mostrar el selector de fecha, se pasa por paremtro si la fecha es la de inicio o la de fin
   Future<void> _selectDate(bool isFromDate) async {
+    // Calculo de la fecha inicial del selector
+    final initialDate = isFromDate ? (fromDate ?? DateTime.now()) : (untilDate ?? fromDate ?? DateTime.now());
+    // Calculo de la fecha minima, no se permiten fechas pasadas
+    final firstDate = isFromDate ? DateTime.now() : (fromDate ?? DateTime.now());
+
+    // Se muestra el selector de fecha con los datos anteriores
     final DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime(DateTime.now().year),
-      lastDate: DateTime(DateTime.now().year + 1),
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      locale: const Locale('es', 'ES'),
+      cancelText: 'Cancelar',
+      confirmText: 'Aceptar',
     );
 
-    if (pickedDate != null) {
+    if (pickedDate != null) { // Si no se selecciona una fecha no se hace nada
       setState(() {
-        if (isFromDate) {
+        errorMessage = null;
+
+        if (isFromDate) { // Si la fecha es la de inicio del viaje, se actualiza esa fecha
           fromDate = pickedDate;
-          _fromController.text =
-              "${pickedDate.day}/${pickedDate.month}/${pickedDate.year}";
-        } else {
+          _fromController.text = "${pickedDate.day}/${pickedDate.month}/${pickedDate.year}";
+
+          // Ademas se actualiza la fecha de fin si era posterior o estaba vacia
+          if (untilDate == null || untilDate!.isBefore(fromDate!)) {
+            untilDate = fromDate;
+            _untilController.text = _fromController.text;
+          }
+        } 
+        else { // Si la fecha era la de fin, se actualiza esa fecha
           untilDate = pickedDate;
-          _untilController.text =
-              "${pickedDate.day}/${pickedDate.month}/${pickedDate.year}";
+          _untilController.text = "${pickedDate.day}/${pickedDate.month}/${pickedDate.year}";
         }
       });
     }
   }
 
+  @override
+  void dispose() {
+    _originController.dispose();
+    _destinationController.dispose();
+    _fromController.dispose();
+    _untilController.dispose();
+    super.dispose();
+  }
+
+  // Funcion para construir la pantalla
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -69,42 +113,81 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
           constraints: const BoxConstraints(maxWidth: 600),
           child: Column(
             children: [
-              Card(
+              Card( // Se meten todos los campos del formualrio en un card 
                 elevation: 4,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      TextField(
-                        readOnly: false,
-                        decoration: const InputDecoration(
-                          labelText: "Origen",
-                          prefixIcon: Icon(Icons.location_on),
-                          border: OutlineInputBorder(),
+                      // Si hay un error, se muestra el mensaje de error en la parte superior
+                      if (errorMessage != null)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(8),
+                          color: Colors.red.shade100,
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.error_outline,
+                                color: Colors.red,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  errorMessage!,
+                                  style: const TextStyle(color: Colors.red),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        onTap: () {},
+
+                      PlaceSearchField( // Widget que se encarga de mostar el campo de origen
+                        controller: _originController,
+                        labelText: "Origen",
+                        errorText: errorMessage != null && _originController.text.isEmpty ? "Campo obligatorio" : null,
+                        iconColor: Colors.blue,
+                        placesService: placesService,
+                        onPlaceSelected: (suggestion, coords) {
+                          if (coords != null) {
+                            setState(() {
+                              originLat = coords['lat'];
+                              originLng = coords['lng'];
+                              errorMessage = null;
+                            });
+                          }
+                        },
                       ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        readOnly: false,
-                        decoration: const InputDecoration(
-                          labelText: "Destino",
-                          prefixIcon: Icon(Icons.flag),
-                          border: OutlineInputBorder(),
-                        ),
-                        onTap: () {},
+                      const SizedBox(height: 12),
+                    
+                      // Campo destino
+                      PlaceSearchField( // Widget que se encarga de mostar el campo de destino
+                        controller: _destinationController,
+                        labelText: "Destino",
+                        errorText: errorMessage != null && _destinationController.text.isEmpty ? "Campo obligatorio" : null,
+                        iconColor: Colors.red, 
+                        placesService: placesService,
+                        onPlaceSelected: (suggestion, coords) {
+                          if (coords != null) {
+                            setState(() {
+                              destLat = coords['lat'];
+                              destLng = coords['lng'];
+                              errorMessage = null;
+                            });
+                          }
+                        },
                       ),
                       const SizedBox(height: 16),
                       TextField(
                         controller: _fromController,
                         readOnly: true,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: "Fecha desde",
                           prefixIcon: Icon(Icons.calendar_today),
-                          border: OutlineInputBorder(),
+                          border: OutlineInputBorder(), errorText: errorMessage != null && _fromController.text.isEmpty ? "Campo obligatorio" : null,
                         ),
                         onTap: () => _selectDate(true),
                       ),
@@ -112,59 +195,54 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
                       TextField(
                         controller: _untilController,
                         readOnly: true,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: "Fecha hasta",
                           prefixIcon: Icon(Icons.calendar_today),
                           border: OutlineInputBorder(),
                         ),
                         onTap: () => _selectDate(false),
                       ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 16),
-                      child: Center(
-                        child: SizedBox(
-                          width: 200,
-                          height: 40,
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              final result = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => FilterOptionsPage(
-                                    selectedRole: selectedRole,
-                                    radiusToOrigin: radiusOrigin,
-                                    radiusToDest: radiusDest,
-                                    selectedEnvSticker: selectedEnvSticker,
-                                    selectedTravelType: selectedTravelType,
-                                    selectedPreferences: selectedPreferences,
+                      Padding( // Se añade el boton para filtrar, que abre la pagina de filtros, y al volver se actualizan los filtros
+                        padding: const EdgeInsets.only(top: 16),
+                        child: Center(
+                          child: SizedBox(
+                            width: 200,
+                            height: 40,
+                            child: ElevatedButton(
+                              onPressed: () async {
+                                final result = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => FilterOptionsPage(
+                                      selectedRole: selectedRole,
+                                      radiusToOrigin: radiusOrigin,
+                                      radiusToDest: radiusDest,
+                                      selectedEnvSticker: selectedEnvSticker,
+                                      selectedTravelType: selectedTravelType,
+                                      selectedPreferences: selectedPreferences,
+                                    ),
                                   ),
-                                ),
-                              );
+                                );
 
-                              if (result != null) {
-                                setState(() {
-                                  selectedRole = result["role"];
-                                  radiusOrigin = result["radiusOrigin"];
-                                  radiusDest = result["radiusDest"];
-                                  selectedEnvSticker = result["envSticker"];
-                                  selectedTravelType = result["travelType"];
-                                  selectedPreferences = result["selectedPreferences"];
-                                });
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(
-                              //backgroundColor: Colors.grey, // Establecer el color del boton
-                              //padding: const EdgeInsets.symmetric(vertical: 40),
-                            ),
-                            child: const Text(
-                              "Añadir filtros",
-                              style: TextStyle(fontSize: 16),
+                                if (result != null) { // Si se han añadido filtros, se actualizan
+                                  setState(() {
+                                    selectedRole = result["role"];
+                                    radiusOrigin = result["radiusOrigin"];
+                                    radiusDest = result["radiusDest"];
+                                    selectedEnvSticker = result["envSticker"];
+                                    selectedTravelType = result["travelType"];
+                                    selectedPreferences = result["selectedPreferences"];
+                                  });
+                                }
+                              },
+                              child: const Text(
+                                "Añadir filtros",
+                                style: TextStyle(fontSize: 16),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    )
-
                     ],
                   ),
                 ),
@@ -172,22 +250,64 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
+                child: ElevatedButton( // Boton para realizar la busqueda de los viajes con los datos introducidos
                   onPressed: () {
+                    // Se realiza una comprobacion de que los campos no esten vacios
+                    if (_originController.text.trim().isEmpty || _destinationController.text.trim().isEmpty || fromDate == null) {
+                      setState(() { // Si alguno esta vacio, se muestra el mensaje de error
+                        errorMessage = "Por favor, rellena los campos de origen, destino y fecha de inicio.";
+                      });
+                      return; // No se realiza la peticion
+                    }
+
+                    // Si alguna coordenada es nula, se muestra un error
+                    if (originLat == null || originLng == null ||destLat == null || destLng == null) { 
+                      setState(() {
+                        errorMessage = "Selecciona el origen y el destino desde las opciones sugeridas.";
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar( // Ademas se muestra un mensjae al final de la pantalla para informar al usuario
+                        const SnackBar(
+                          content: Text(
+                            "Por favor, selecciona origen y destino desde el desplegable.",
+                          ),
+                          backgroundColor: Colors.red,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      return;
+                    }
+
+                    // Si no hay fallos, se limpia el mensaje de error por si acaso
+                    setState(() {
+                      errorMessage = null;
+                    });
+
+                    // Se pasa a la pantalla de lista de viajes con los datos que ha metido el usuario
+                    // Esta pagina sera la que llame a la api y cargue los viajes
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const SearchTravelListView(),
+                        builder: (context) => SearchTravelListView(
+                          fromDate: fromDate,
+                          untilDate: untilDate,
+                          selectedRole: selectedRole,
+                          radiusOrigin: radiusOrigin,
+                          radiusDest: radiusDest,
+                          selectedEnvSticker: selectedEnvSticker,
+                          selectedTravelType: selectedTravelType,
+                          selectedPreferences: selectedPreferences,
+                          origLat: originLat!,
+                          origLng: originLng!,
+                          destLat: destLat!,
+                          destLng: destLng!,
+                        ),
                       ),
                     );
                   },
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  child: const Text(
-                    "Buscar",
-                    style: TextStyle(fontSize: 16),
-                  ),
+                  child: const Text("Buscar", style: TextStyle(fontSize: 16)),
                 ),
               ),
             ],

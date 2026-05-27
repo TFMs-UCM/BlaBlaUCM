@@ -12,30 +12,28 @@ import mimetypes
 @permission_classes([IsAuthenticated])
 def serve_protected_profile_picture(request, filename):
     """
-    Serve profile pictures only to authenticated users.
-    This protects profile pictures from public access.
-    
-    Usage: GET /api/v1/media/profile_pics/{filename}
+    Endpoint para servir las imagenes de perfil, es necesario la autenticacion previa
+    Uso: GET /api/v1/media/profile_pics/{filename}
     """
-    # Construct the full file path
+    # Se construye la ruta completa al archivo
     file_path = os.path.join(settings.MEDIA_ROOT, 'profile_pics', filename)
     
-    # Check if file exists
+    # Se comprueba si existe el archivo
     if not os.path.exists(file_path):
         return HttpResponse("File not found", status=404)
     
-    # Get the file's MIME type
+    # Coge el tipo de contenido del archivo
     content_type, _ = mimetypes.guess_type(file_path)
     if content_type is None:
         content_type = 'application/octet-stream'
     
-    # Read and serve the file
+    # Se lee y se devuelve el archivo
     try:
         with open(file_path, 'rb') as f:
             response = HttpResponse(f.read(), content_type=content_type)
             response['Content-Length'] = os.path.getsize(file_path)
-            # Add cache control for performance
-            response['Cache-Control'] = 'max-age=3600'  # Cache for 1 hour
+            # Se añade un encabezado para controlar el chacheo del archivo
+            response['Cache-Control'] = 'max-age=3600'  # Se pone por una hora
             return response
     except IOError:
         return HttpResponse("File could not be read", status=500)

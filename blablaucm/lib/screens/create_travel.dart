@@ -1,738 +1,208 @@
-import 'package:blablaucm/screens/created_vehicle_details.dart';
+import 'package:blablaucm/models/pick_up_points_model.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/models/vehicle_model.dart';
 import 'package:blablaucm/models/enums.dart';
+import 'package:blablaucm/services/vehicles_service.dart';
+import 'package:blablaucm/services/api_service.dart';
+import 'package:blablaucm/providers/storage_provider.dart';
+import 'package:blablaucm/services/google_places_service.dart';
+import 'package:blablaucm/screens/create_travel_steps.dart'; 
+import 'package:blablaucm/screens/helper.dart';
 
-class Stop {
-  String name;
-  Stop({required this.name});
-}
+// Pantalla para la creacion de un viaje
 
 class CreatedTravelScreen extends StatefulWidget {
   const CreatedTravelScreen({super.key});
 
   @override
-  State<CreatedTravelScreen> createState() =>
-      _CreatedTravelScreenState();
+  State<CreatedTravelScreen> createState() => _CreatedTravelScreenState();
 }
 
 class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
+  final ApiService api = ApiService();
+  final SecureStorageService storage = SecureStorageService();
+  final GooglePlacesService placesService = GooglePlacesService();
 
-  int currentStep = 0;
-  bool showError = false;
+  int currentStep = 0; // Pasos para crear un viaje: 0: Fecha, 1: Ruta, 2: Vehiculo, 3: Datos adicionales, 4: Resumen
+  bool showError = false; // Muestra si hay error para no pasar al siguiente paso
+  bool isCreating = false;
 
-
+  // Variables para almacenar los datos del viaje
   DateTime? selectedDate;
 
- 
+  final TextEditingController numSeatsCtrl = TextEditingController();
+  int numSeats = 1;
+  
   final TextEditingController originCtrl = TextEditingController();
+  double? originLat; 
+  double? originLng; 
+
   final TextEditingController destinationCtrl = TextEditingController();
-  final List<Stop> stops = [];
+  double? destLat; 
+  double? destLng;
 
-
+  final TextEditingController durationCtrl = TextEditingController();
+  final List<PickUpPointModel> pickUpPoints = [];
+  
+  List<VehicleModel> userVehicles = [];
+  bool isLoadingVehicles = true;
+  bool isLoadingMoreVehicles = false;
+  String? nextVehiclesUrl;
+  
   VehicleModel vehicle = VehicleModel(
-    id: "temp",
-    plate: "",
-    brand: "",
-    model: "",
-    numSeats: 0,
-    envSticker: null,
+    id: "temp", plate: "", brand: "", model: "", numSeats: 0, envSticker: null,
   );
-
 
   TravelType selectedTravelType = TravelType.punctual;
   final TextEditingController periodicDaysCtrl = TextEditingController();
-  List<UsersType> selectedUserTypes = [];
+  DateTime? endPeriodicDate; 
+  List<UsersType> restrictedUserTypes = [];
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Crear viaje"),
-        centerTitle: true,
-      ),
-      body: Column(
-        children: [
-          const SizedBox(height: 16),
-          _buildStepIndicators(),
-          const SizedBox(height: 16),
-          Expanded(child: _buildCurrentStep()),
-        ],
-      ),
-    );
+  void initState() {
+    super.initState();
+    // Al iniciar la pantalla, se cargan los primeros vehiculos del usuario
+    _loadVehicles();
   }
 
-  Widget _buildCurrentStep() {
-    switch (currentStep) {
-      case 0:
-        return _buildDateStep();
-      case 1:
-        return _buildRouteStep();
-      case 2:
-        return _buildVehicleStep();
-      case 3:
-        return _buildTravelDataStep();
-      default:
-        return Container();
-    }
+  @override
+  void dispose() {
+    originCtrl.dispose();
+    destinationCtrl.dispose();
+    durationCtrl.dispose();
+    periodicDaysCtrl.dispose();
+    super.dispose();
   }
 
-  Widget _buildStepIndicators() {
+  
+  // Funcion para cargar los vehiculso del usuario
+  Future<void> _loadVehicles() async {
+    // Se llama al servicio para obtener los vehiculos
+    final result = await VehicleService.getVehicles();
 
-    const steps = ["Fecha", "Ruta", "Vehículo", "Datos"];
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(steps.length, (index) {
-
-        final active = index == currentStep;
-        final completed = index < currentStep;
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Column(
-            children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor:
-                    active || completed
-                        ? Colors.blue
-                        : Colors.grey.shade300,
-                child: Text(
-                  "${index + 1}",
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(active ? steps[index] : ""),
-            ],
-          ),
-        );
-      }),
-    );
-  }
-
-  /// BOTONES
-
-  Widget _buildNavigationButtons() {
-    return Column(
-      children: [
-
-        if (showError)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 12),
-            child: Text(
-              "Faltan campos obligatorios",
-              style: TextStyle(
-                color: Colors.red,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-
-            if (currentStep == 0)
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text("Cancelar"),
-              )
-            else
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    showError = false;
-                    currentStep--;
-                  });
-                },
-                child: const Text("Atrás"),
-              ),
-
-            const SizedBox(width: 16),
-
-            ElevatedButton(
-              onPressed: _handleNext,
-              child: Text(
-                currentStep == 3 ? "Aceptar" : "Siguiente",
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  void _handleNext() {
+    if (!mounted) return;
 
     setState(() {
-      showError = false;
+      if (!result.hasError) { // Si no ha dado ningun error, se cargan los vehiculos
+        userVehicles = result.vehicles; 
+        nextVehiclesUrl = result.nextUrl; 
+      } 
+      isLoadingVehicles = false; 
     });
+  }
 
-    if (currentStep == 0 && selectedDate == null) {
-      setState(() => showError = true);
-      return;
-    }
+  // Funcion para cargar mas vehiculos 
+  Future<void> _loadMoreVehicles({VoidCallback? onModalUpdate}) async {
+    // Se comprueba que existan mas vehiculos para solicitar
+    if (nextVehiclesUrl == null || isLoadingMoreVehicles) return;
 
-    if (currentStep == 1 &&
-        (originCtrl.text.isEmpty ||
-            destinationCtrl.text.isEmpty)) {
-      setState(() => showError = true);
-      return;
-    }
+    setState(() => isLoadingMoreVehicles = true);
+    if (onModalUpdate != null) onModalUpdate();
 
-    if (currentStep == 2 && vehicle.id == "temp") {
-      setState(() => showError = true);
-      return;
-    }
+    // Se llama al servicio para solicitar mas vehiculos
+    final result = await VehicleService.getVehicles(nextUrl: nextVehiclesUrl!);
 
-    if (currentStep == 3) {
+    if (!mounted) return;
 
-      if (selectedTravelType == TravelType.periodic) {
-
-        final days = int.tryParse(periodicDaysCtrl.text);
-
-        if (days == null || days < 1 || days > 31) {
-          setState(() => showError = true);
-          return;
-        }
+    setState(() { 
+      if (!result.hasError) { // Si no hay error, se cargan los nuevos vehiculos
+        userVehicles.addAll(result.vehicles);
+        nextVehiclesUrl = result.nextUrl;
       }
+      isLoadingMoreVehicles = false;
+    });
+    if (onModalUpdate != null) onModalUpdate();
+  }
+
+  // Funcion para crear el viaje, mandando a la api el JSON con los datos del viaje
+  Future<void> _createTravel() async {
+    setState(() => isCreating = true);
+
+    try {
+      final userId = await storage.getElement("user_id");
+
+      final travelData = {
+        "origin": originCtrl.text.trim(),
+        "origin_lat": originLat, 
+        "origin_lng": originLng,
+        
+        "destination": destinationCtrl.text.trim(),
+        "destination_lat": destLat,
+        "destination_lng": destLng,
+        
+        "duration_minutes": int.tryParse(durationCtrl.text.trim()) ?? 60,
+        "num_seats": numSeats,
+        "remaining_seats": numSeats,
+        "travel_date": selectedDate!.toUtc().toIso8601String(),
+        "is_periodic": selectedTravelType == TravelType.periodic,
+        "periodic_interval": selectedTravelType == TravelType.periodic ? int.tryParse(periodicDaysCtrl.text) : null,
+        // la fecha se pasa en UTC y con el iso8601 para evitar errores de formato y la zona horaria
+        "end_periodic_date": selectedTravelType == TravelType.periodic && endPeriodicDate != null ? endPeriodicDate!.toUtc().toIso8601String().split('T')[0] : null,
+        "creation_user": userId,
+        "vehicle_id": vehicle.id,
+        "state": TravelStatus.active.name, // El viaje que se crea siempre es activo
+        // Se mapean los puntos de recogida
+        "pick_up_points": pickUpPoints.asMap().entries.map((entry) {
+          return {
+            "order_in_travel": entry.key + 1,
+            "direction": entry.value.name,
+            "lat": entry.value.lat,
+            "lng": entry.value.lng,
+            "date": entry.value.date != null
+              ? DateTime(
+                  selectedDate!.year,
+                  selectedDate!.month,
+                  selectedDate!.day,
+                  entry.value.date!.hour,
+                  entry.value.date!.minute,
+                  0,
+                ).toUtc().toIso8601String() : null,
+          };
+        }).toList(),
+
+        "deny_roles": restrictedUserTypes.map((u) => u.name).toList(),
+      };
+
+      // Se construye la url 
+      final travelEndpoint = dotenv.env['TRAVELS_ENDPOINT'] ?? "/travels/";
+
+      // Se envian los datos
+      final response = await api.requestToApi(travelEndpoint, op: ApiOptions.post, body: travelData);
+
+      if (!mounted) return;
+      // Se comprueba la respuesta de la api
+      if (response != null && response["error"] == null) {
+        _showSuccessDialog(); // Se muestra mensaje de exito
+      } 
+      else {
+        showModal(context, "Error al crear el viaje en el servidor"); // Se muestra mensaje de error
+      }
+    } catch (e) {
+      if (!mounted) return;
+      // Si es un error inesperado, se muestra en la parte inferior de la pantalla en lugar de una modal
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Error de conexión"), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => isCreating = false);
     }
-
-    if (currentStep < 3) {
-      setState(() => currentStep++);
-    } else {
-      _showSuccessDialog();
-    }
   }
 
-  /// VEHICULOS
-
-  void _selectVehicle() {
-
-    final userVehicles = [
-      VehicleModel(
-          id: "1",
-          plate: "1234ABC",
-          brand: "Toyota",
-          model: "Corolla",
-          numSeats: 5,
-          envSticker: EnvSticker.c),
-      VehicleModel(
-          id: "2",
-          plate: "5678DEF",
-          brand: "Seat",
-          model: "Ibiza",
-          numSeats: 5,
-          envSticker: EnvSticker.b),
-    ];
-
-    showDialog(
-      context: context,
-      builder: (context) {
-
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-
-                const Text(
-                  "Selecciona un vehículo",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                ...userVehicles.map((v) {
-
-                  final selected = vehicle.id == v.id;
-
-                  return ListTile(
-                    leading: const Icon(Icons.directions_car),
-                    title: Text(v.vehiclePreview()),
-                    subtitle: Text("${v.numSeats} asientos"),
-                    trailing: selected
-                        ? const Icon(Icons.check_circle,
-                            color: Colors.blue)
-                        : null,
-                    onTap: () {
-
-                      setState(() {
-                        vehicle = v;
-                      });
-
-                      Navigator.pop(context);
-                    },
-                  );
-                }).toList(),
-
-                const SizedBox(height: 12),
-
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _createVehicle();
-                  },
-                  icon: const Icon(Icons.add),
-                  label: const Text("Crear nuevo vehículo"),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  void _createVehicle() {
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CreatedVehicleDetailsScreen(
-          onSave: (v) {
-
-            setState(() {
-              vehicle = v;
-            });
-
-          },
-        ),
-      ),
-    );
-  }
-
-  /// Primer paso
-
-  Widget _buildDateStep() {
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                children: [
-
-                  const Text(
-                    "Seleccione la fecha del viaje",
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  Text(
-                    selectedDate == null
-                        ? "No seleccionada"
-                        : "${selectedDate!.day}/${selectedDate!.month}/${selectedDate!.year}",
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  ElevatedButton(
-                    onPressed: () async {
-
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: DateTime.now(),
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime(2100),
-                      );
-
-                      if (picked != null) {
-                        setState(() {
-                          selectedDate = picked;
-                        });
-                      }
-                    },
-                    child: const Text("Seleccionar fecha"),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          _buildNavigationButtons(),
-        ],
-      ),
-    );
-  }
-
-  /// Segundo paso
-
-  Widget _buildRouteStep() {
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-
-                          TextField(
-                            controller: originCtrl,
-                            decoration: InputDecoration(
-                              labelText: "Origen",
-                              errorText: showError &&
-                                      originCtrl.text.isEmpty
-                                  ? "Campo obligatorio"
-                                  : null,
-                            ),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          TextField(
-                            controller: destinationCtrl,
-                            decoration: InputDecoration(
-                              labelText: "Destino",
-                              errorText: showError &&
-                                      destinationCtrl.text.isEmpty
-                                  ? "Campo obligatorio"
-                                  : null,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  ...stops.map((stop) {
-
-                    return Card(
-                      child: ListTile(
-                        title: TextField(
-                          controller:
-                              TextEditingController(text: stop.name),
-                          onChanged: (val) => stop.name = val,
-                          decoration:
-                              const InputDecoration(labelText: "Parada"),
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.remove_circle,
-                              color: Colors.red),
-                          onPressed: () {
-                            setState(() {
-                              stops.remove(stop);
-                            });
-                          },
-                        ),
-                      ),
-                    );
-                  }),
-
-                  const SizedBox(height: 12),
-
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        stops.add(Stop(name: ""));
-                      });
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text("Añadir parada"),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          _buildNavigationButtons(),
-        ],
-      ),
-    );
-  }
-
-  /// Tercer paso
-
-  Widget _buildVehicleStep() {
-
-    return Column(
-      children: [
-
-        const Spacer(),
-
-        Column(
-          children: [
-
-            const Icon(
-              Icons.directions_car,
-              size: 70,
-              color: Colors.blue,
-            ),
-
-            const SizedBox(height: 20),
-
-            if (vehicle.id != "temp")
-              Card(
-                margin:
-                    const EdgeInsets.symmetric(horizontal: 20),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-
-                      Text(
-                        vehicle.vehiclePreview(),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-
-                      const SizedBox(height: 8),
-
-                      Text("${vehicle.numSeats} asientos"),
-
-                      if (vehicle.envSticker != null)
-                        Text(
-                            "Etiqueta: ${vehicle.envSticker!.name}"),
-                    ],
-                  ),
-                ),
-              )
-            else
-              const Text(
-                "Selecciona un vehículo",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-
-            const SizedBox(height: 20),
-
-            ElevatedButton.icon(
-              onPressed: _selectVehicle,
-              icon: const Icon(Icons.arrow_drop_down),
-              label: const Text("Vehículos disponibles"),
-            ),
-          ],
-        ),
-
-        const Spacer(),
-
-        _buildNavigationButtons(),
-      ],
-    );
-  }
-
-  /// Ultimo paso
-
-  Widget _buildTravelDataStep() {
-
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-
-          Expanded(
-            child: SingleChildScrollView(
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-
-                      DropdownButtonFormField<TravelType>(
-                        initialValue: selectedTravelType,
-                        decoration:
-                            const InputDecoration(
-                                labelText: "Tipo de viaje"),
-                        items: TravelType.values
-                            .where((e) => e != TravelType.all)
-                            .map(
-                              (e) => DropdownMenuItem(
-                                value: e,
-                                child: Text(e.name),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (val) {
-                          setState(() {
-                            selectedTravelType = val!;
-                          });
-                        },
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      if (selectedTravelType ==
-                          TravelType.periodic)
-                        TextField(
-                          controller: periodicDaysCtrl,
-                          keyboardType:
-                              TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter
-                                .digitsOnly
-                          ],
-                          decoration: InputDecoration(
-                            labelText: "Periodo (1-31 días)",
-                            errorText: showError &&
-                                    (int.tryParse(
-                                                periodicDaysCtrl
-                                                    .text) ==
-                                            null ||
-                                        int.parse(
-                                                periodicDaysCtrl
-                                                    .text) <
-                                            1 ||
-                                        int.parse(
-                                                periodicDaysCtrl
-                                                    .text) >
-                                            31)
-                                ? "El valor debe estar entre 1 y 31"
-                                : null,
-                          ),
-                        ),
-
-                      const SizedBox(height: 24),
-
-                      ...selectedUserTypes.map((type) {
-
-                        return Card(
-                          child: ListTile(
-                            title: DropdownButton<UsersType>(
-                              value: type,
-                              isExpanded: true,
-                              items: UsersType.values
-                                  .where((u) =>
-                                      !selectedUserTypes
-                                              .contains(
-                                                  u) ||
-                                      u == type)
-                                  .map((u) =>
-                                      DropdownMenuItem(
-                                        value: u,
-                                        child:
-                                            Text(u.name),
-                                      ))
-                                  .toList(),
-                              onChanged: (val) {
-
-                                setState(() {
-
-                                  final index =
-                                      selectedUserTypes
-                                          .indexOf(type);
-
-                                  selectedUserTypes[
-                                          index] =
-                                      val!;
-                                });
-                              },
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(
-                                  Icons.remove_circle,
-                                  color: Colors.red),
-                              onPressed: () {
-
-                                setState(() {
-
-                                  selectedUserTypes
-                                      .remove(type);
-                                });
-                              },
-                            ),
-                          ),
-                        );
-                      }).toList(),
-
-                      const SizedBox(height: 12),
-
-                      ElevatedButton.icon(
-                        onPressed: () {
-
-                          final available =
-                              UsersType.values
-                                  .where((u) =>
-                                      !selectedUserTypes
-                                          .contains(
-                                              u))
-                                  .toList();
-
-                          if (available.isNotEmpty) {
-
-                            setState(() {
-
-                              selectedUserTypes.add(
-                                  available.first);
-                            });
-                          }
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text(
-                            "Añadir tipo de usuario"),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          _buildNavigationButtons(),
-        ],
-      ),
-    );
-  }
-
-  /// Alerta de confirmacion 
-
+  // Ventana modal para mostar mensaje de exito
   void _showSuccessDialog() {
-
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) {
-
         return AlertDialog(
           title: const Text("Viaje creado"),
-          content: const Text(
-              "El viaje se ha creado correctamente."),
+          content: const Text("El viaje se ha creado correctamente y ya está publicado."),
           actions: [
-
             TextButton(
               onPressed: () {
-
                 Navigator.pop(context);
-
-                Navigator.of(context)
-                    .popUntil((route) => route.isFirst);
+                Navigator.of(context).popUntil((route) => route.isFirst);
               },
               child: const Text("Aceptar"),
             ),
@@ -740,5 +210,294 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
         );
       },
     );
+  }
+
+  // Funcion para manejar el boton de siguiente, validando los campos del paso actual
+  void _handleNext() {
+
+    setState(() => showError = false);
+    // En el paso 0, se comprueba que se haya seleccionado una fecha
+    if (currentStep == 0 && selectedDate == null) {
+      setState(() => showError = true); 
+      return;
+    }
+    // En el paso 1, se comprueba que se hayan completado los campos de origen, destino y duración y que las coordenadas sean validas
+    if (currentStep == 1) {
+      if (originCtrl.text.isEmpty || destinationCtrl.text.isEmpty || durationCtrl.text.isEmpty) {
+        setState(() => showError = true); 
+        return;
+      }
+
+      // Validacion de las coordenadas, ya que sin ellas no se podra lanzar en un futuro Google Maps
+      if (originLat == null || originLng == null || destLat == null || destLng == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Por favor, selecciona los lugares desde las opciones del desplegable."), 
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => showError = true); 
+        return;
+      }
+
+      // Validacion de las coordenadas de las paradas intermedias
+      bool hasInvalidPickUpPoint = pickUpPoints.any((punto) => punto.lat == null || punto.lng == null);
+      if (hasInvalidPickUpPoint) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Por favor, selecciona las paradas intermedias desde las opciones del desplegable."), 
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => showError = true); 
+        return;
+      }
+    }
+
+    // Si es el paso 2, se comprueba que se haya seleccionado un vehiculo
+    if (currentStep == 2 && vehicle.id == "temp") {
+      setState(() => showError = true); 
+      return;
+    }
+     // En el paso 3, se valida si el viaje es periodico, que haya un numero de dias valido y una fecha de fin
+    if (currentStep == 3 && selectedTravelType == TravelType.periodic) {
+      final days = int.tryParse(periodicDaysCtrl.text);
+      if (days == null || days < 1 || days > 31 || endPeriodicDate == null) {
+        setState(() => showError = true); 
+        return;
+      }
+    }
+    // Se valida que no exceda el numero de plazas permitidas, ni que sea un numero menor a 1
+    if (currentStep == 3) {
+      if(numSeatsCtrl.text.isNotEmpty){
+        final seats = int.tryParse(numSeatsCtrl.text);
+        if (seats == null || seats < 1 || seats > vehicle.numSeats - 1) {
+          setState(() => showError = true); 
+          return;
+        }
+        numSeats = seats;
+      }
+      else{
+        setState(() => showError = true); 
+        return;
+      }
+    }
+    // Si todas las validaciones son correstas y es el ultimo paso, se puede crear el viaje
+    if (currentStep == 4) {
+      _createTravel();
+    } 
+    else { // Si no es el ultimo paso, y las validaciones son correctas, se pasa al siguiente paso
+      setState(() => currentStep++);
+    }
+  }
+  // Funcion para retroceder al paso anterior
+  Future<bool> _handleBackNavigation() async {
+    if (isCreating) return false;
+
+    // Si es el paso 0, no se va hacia atras, se sale de la pantalla
+    if (currentStep > 0) {
+      setState(() {
+        currentStep--;
+        showError = false;
+      });
+      return false;
+    }
+    return true;
+  }
+
+  // Funcion para construir la pantalla
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false, 
+      onPopInvokedWithResult: (bool didPop, Object? result) async {
+        if (didPop) return; 
+        // Se muestran los botones de atras
+        final bool shouldPopRoute = await _handleBackNavigation();
+        if (shouldPopRoute && context.mounted) {
+          Navigator.pop(context);
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("Crear viaje"),
+          centerTitle: true,
+          leading: IconButton(
+            // Se añade la flecha para vovler atras, ademas del boton de atras
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.maybePop(context), 
+          ),
+        ),
+        body: Column(
+          children: [
+            const SizedBox(height: 16),
+            _buildStepIndicators(),
+            const SizedBox(height: 16),
+            // Se muestra el paso actual
+            Expanded(child: _buildCurrentStep()), 
+            // Se muestran los botones de navegacion
+            Padding(
+              padding: const EdgeInsets.only(bottom: 24, left: 16, right: 16),
+              child: _buildNavigationButtons(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // WIdget para mostrar los iconos de los pasos que hay para crear un viaje, indicando el paso actual
+  Widget _buildStepIndicators() {
+    // Lista de pasos que se muestra al usuario
+    const steps = ["Fecha", "Ruta", "Vehículo", "Datos", "Resumen"];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(steps.length, (index) {
+          final active = index == currentStep; // Se saca cual es el paso actual 
+          final completed = index < currentStep; // Se marcan los completados 
+
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Column(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: active || completed ? Colors.blue : Colors.grey.shade300, // El paso actual se muestra en otro color para diferenciarlo
+                  child: active && isCreating
+                      ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : Text("${index + 1}", style: const TextStyle(color: Colors.white)),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  steps[index],
+                  style: TextStyle(
+                    fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                    color: active || completed ? Colors.black : Colors.grey, // Los completados tienen otro color para diferenciarlos
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  // Wiget para mostratr los botones de navegacion
+  Widget _buildNavigationButtons() {
+    return Column(
+      children: [
+        if (showError)
+          const Padding( // Muestra u mensaje en caso de error
+            padding: EdgeInsets.only(bottom: 12),
+            child: Text("Revisa los campos obligatorios", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (currentStep == 0) // Si es el paso 0, no hay un atras, es un cancelar para cerrar esta ventana e ir al menu principal
+              TextButton(onPressed: isCreating ? null : () => Navigator.pop(context), child: const Text("Cancelar"))
+            else // Si no es el paso 0, se muestra el boton de atras para volver al paso anterior
+              TextButton(
+                onPressed: isCreating ? null : () => setState(() { showError = false; currentStep--; }),
+                child: const Text("Atrás"),
+              ),
+            const SizedBox(width: 16),
+            ElevatedButton( // Si es el ultimo paso, el boton es el de crear, si no, es el de siguiente
+              onPressed: isCreating ? null : _handleNext,
+              child: isCreating ? const Text("Creando...") : Text(currentStep == 4 ? "Crear viaje" : "Siguiente"),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  //Widget para mostrar el contenido del paso actual
+  Widget _buildCurrentStep() {
+    switch (currentStep) {
+      case 0: // En el paso 0, se muestra el widget para seleccionar la fecha del viaje
+        return DateStepWidget(
+          selectedDate: selectedDate,
+          onDateSelected: (date) {
+            setState(() {
+              selectedDate = date;
+              if (endPeriodicDate != null && endPeriodicDate!.isBefore(selectedDate!)) {
+                endPeriodicDate = null;
+              }
+            });
+          },
+        );
+      case 1: // En el paso 1, se muestra el widget para seleccionar el origen, destino, duración y paradas intermedias del viaje
+        return RouteStepWidget(
+          originCtrl: originCtrl,
+          destinationCtrl: destinationCtrl,
+          durationCtrl: durationCtrl,
+          showError: showError,
+          pickUpPoints: pickUpPoints,
+          placesService: placesService,
+          onCoordsUpdated: (lat, lng, isOrigin) {
+            setState(() {
+              if (isOrigin) { originLat = lat; originLng = lng; } 
+              else { destLat = lat; destLng = lng; }
+            });
+          },
+          onPickUpPointsChanged: () => setState(() {}),
+        );
+      case 2: // En el paso 2, se muestra el widget para seleccionar el vehiculo para el viaje
+        return VehicleStepWidget(
+          vehicle: vehicle,
+          userVehicles: userVehicles,
+          isLoadingVehicles: isLoadingVehicles,
+          isLoadingMoreVehicles: isLoadingMoreVehicles,
+          nextVehiclesUrl: nextVehiclesUrl,
+          onSelectVehicle: (v) => setState(() => vehicle = v),
+          onLoadMore: _loadMoreVehicles,
+          onVehicleCreated: (v) => setState(() {
+            userVehicles.insert(0, v);
+            vehicle = v;
+          }),
+        );
+      case 3: // En el paso 3, se muestra el widget para seleccionar los datos adicionales del viaje, tipo de viaje, numero de plazas, intervalo y fecha de fin de periodicidad, y restricciones de usuarios
+        return TravelDataStepWidget(
+          selectedTravelType: selectedTravelType,
+          periodicDaysCtrl: periodicDaysCtrl,
+          endPeriodicDate: endPeriodicDate,
+          seatsCtrl: numSeatsCtrl,
+          maxSeats: vehicle.numSeats - 1,
+          restrictedUserTypes: restrictedUserTypes,
+          showError: showError,
+          selectedDate: selectedDate,
+          onTypeChanged: (val) => setState(() {
+            selectedTravelType = val;
+            if (val != TravelType.periodic) {
+              endPeriodicDate = null;
+              periodicDaysCtrl.clear();
+            }
+          }),
+          onEndDateSelected: (date) => setState(() => endPeriodicDate = date),
+          onRestrictionsChanged: () => setState(() {}),
+        );
+      case 4: // En el paso 4, se muestra el widget con los datos del viaje resumidos
+        return SummaryStepWidget(
+          selectedDate: selectedDate,
+          origin: originCtrl.text,
+          destination: destinationCtrl.text,
+          duration: durationCtrl.text,
+          pickUpPoints: pickUpPoints,
+          numSeats: numSeatsCtrl.text,
+          vehicle: vehicle,
+          travelType: selectedTravelType,
+          periodicDays: periodicDaysCtrl.text,
+          endPeriodicDate: endPeriodicDate,
+          restrictedUserTypes: restrictedUserTypes,
+        );
+      default: return Container();
+    }
   }
 }

@@ -8,3 +8,9 @@ blablaUCMWS/blablaUCM/.env.production
 /blablaUCMWS/blablaUCM/travels/migrations/__pycache__
 /blablaUCMWS/blablaUCM/users/__pycache__
 /blablaUCMWS/blablaUCM/users/migrations/__pycache__
+blablaucm/.env
+blablaucm/.metadata
+blablaucm/analysis_options.yaml
+blablaucm/assets/.env
+/blablaUCMWS/blablaUCM/users/management/__pycache__
+/blablaUCMWS/blablaUCM/media

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:blablaucm/models/enums.dart';
 
+// Pantalla para mostrar las filtros en la busqueda de viajes
 class FilterOptionsPage extends StatefulWidget {
-  final UsersType? selectedRole;
+  final List<UsersType>? selectedRole;
   final double radiusToOrigin;
   final double radiusToDest;
   final EnvSticker? selectedEnvSticker;
@@ -11,7 +12,7 @@ class FilterOptionsPage extends StatefulWidget {
 
   const FilterOptionsPage({
     super.key,
-    this.selectedRole = UsersType.all,
+    this.selectedRole,
     this.radiusToOrigin = 0,
     this.radiusToDest = 0,
     this.selectedEnvSticker = EnvSticker.all,
@@ -24,16 +25,29 @@ class FilterOptionsPage extends StatefulWidget {
 }
 
 class _FilterOptionsPageState extends State<FilterOptionsPage> {
-  UsersType? selectedRole = UsersType.all; // Valor inicial para el rol (todos)
-  double radiusToOrigin = 0; // Radio al origen valor inicial del slider inf
-  double radiusToDest = 0; // Radio al destinovalor inicial del slider inf
+  List<UsersType>? selectedRole = []; // Lista de roles denegados
+  double radiusToOrigin = 0; // Radio al origen valor inicial del slider infinito
+  double radiusToDest = 0; // Radio al destinovalor inicial del slider infinito
   EnvSticker? selectedEnvSticker = EnvSticker.all;
   TravelType? selectedTravelType = TravelType.all;
   List<DriverPreferences>? selectedPreferences = [];
 
+  // Funcion para limpiar los filtros
+  void clearFilters(){
+    setState(() {
+      selectedRole = [];
+      radiusToOrigin = 0;
+      radiusToDest = 0;
+      selectedEnvSticker = EnvSticker.all;
+      selectedTravelType = TravelType.all;
+      selectedPreferences = [];
+    });
+  }
+
+  // Funcion para cargar los valores de los filtros
   @override void initState() { 
     super.initState(); 
-    selectedRole = widget.selectedRole; 
+    selectedRole = widget.selectedRole ?? []; 
     radiusToOrigin = widget.radiusToOrigin; 
     radiusToDest = widget.radiusToDest; 
     selectedEnvSticker = widget.selectedEnvSticker; 
@@ -41,18 +55,44 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
     selectedPreferences = widget.selectedPreferences ?? [];
   }
 
+  // Funcion para comprobar si el usuario tiene algun filtro activado
+  bool get _hasActiveFilters {
+    return selectedRole!.isNotEmpty ||
+        radiusToOrigin > 0 ||
+        radiusToDest > 0 ||
+        selectedEnvSticker != EnvSticker.all ||
+        selectedTravelType != TravelType.all ||
+        selectedPreferences!.isNotEmpty;
+  }
+
+  // Funcion para crear la pantalla
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-  //backgroundColor: Colors.white, // Color de fondo de la pantalla
-  body: SingleChildScrollView(
-    padding: const EdgeInsets.all(36),
-    child: Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Column(
-          children: [
-              Card(
+      appBar: AppBar(
+        title: const Text("Filtros"),
+        actions: [ if (_hasActiveFilters) // Si tiene algun filtro activo, le da la opcion de eliminarlos
+          TextButton(
+            onPressed: clearFilters,
+            child: const Text( // Texto que al pulsar limpia los filtros
+              "Limpiar",
+              style: TextStyle(
+                color: Colors.blue,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(36),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Column(
+              children: [
+              Card( // Card con los campos de los filtros
                 elevation: 4,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
@@ -61,28 +101,29 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      DropdownButtonFormField<UsersType>(
-                        initialValue: selectedRole,
-                        decoration: const InputDecoration(
-                          labelText: "Usuarios permitidos",
-                          prefixIcon: Icon(Icons.security),
-                          border: OutlineInputBorder(),
+                      ListTile( // Campo para añadir los usuarios restringidos
+                        title: const Text("Usuarios restringidos"),
+                        subtitle: Text( // muestra la cantidad de roles que se han denegado
+                          selectedRole!.isEmpty ? "Ninguno seleccionado" : "${selectedRole!.length} seleccionados",
                         ),
-                        items:
-                          UsersType.values.map((userTypes){
-                            return DropdownMenuItem(value: userTypes, child: Text(userTypes.label),);
-                          }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            selectedRole = value;
-                          });
-                        },
+                        trailing: const Icon(Icons.arrow_drop_down),
+                        onTap: () => _openCheckBoxDialog<UsersType>(
+                          title: "Usuarios restringidos",
+                          allOptions: UsersType.values.where((role) => role != UsersType.all).toList(),
+                          currentSelection: selectedRole,
+                          getLabel: (role) => role.label, 
+                          onConfirm: (newSelection) {
+                            setState(() {
+                              selectedRole = newSelection;
+                            });
+                          },
+                        ),
                       ),
 
                       const SizedBox(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
+                        children: [ // Slider para establecer el radio de origen, por defecto infinito
                           const Text(
                             "Radio desde el origen (km)",
                             style: TextStyle(fontSize: 16),
@@ -103,8 +144,8 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                       Slider(
                         value: radiusToOrigin,
                         min: 0,
-                        max: 5,
-                        divisions: 10,
+                        max: 5, // Maximo 5 km
+                        divisions: 10, // 10 partes para que vaya de 0.5 km en 0.5
                         label: "${radiusToOrigin.toStringAsFixed(1)} km",
                         onChanged: (value) {
                           setState(() {
@@ -114,7 +155,7 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                       ),
 
                       const SizedBox(height: 16),
-                      Row(
+                      Row( // Slider para establecer el radio de destino, por defecto infinito
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
@@ -148,7 +189,7 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                       ),
 
                       const SizedBox(height: 16),
-                      
+                      // Campo de la etiqueta medioambiental del coche deseado
                       DropdownButtonFormField<EnvSticker>(
                         initialValue: selectedEnvSticker,
                         decoration: const InputDecoration(
@@ -156,6 +197,7 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                           prefixIcon: Icon(Icons.security),
                           border: OutlineInputBorder(),
                         ),
+                        // Se abre un dropdown menu con las opciones disponibles para que elija una
                         items: EnvSticker.values.map((envSticker){
                             return DropdownMenuItem(value: envSticker, child: Text(envSticker.label),);
                           }).toList(),
@@ -168,6 +210,7 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
 
                       const SizedBox(height: 20),
 
+                      // Campo del tipo de viaje, periodico o puntual
                       DropdownButtonFormField<TravelType>(
                         initialValue: selectedTravelType,
                         decoration: const InputDecoration(
@@ -175,6 +218,7 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                           prefixIcon: Icon(Icons.security),
                           border: OutlineInputBorder(),
                         ),
+                        // Dropdown con los distintos tipos
                         items: TravelType.values.map((travelType){
                             return DropdownMenuItem(value: travelType, child: Text(travelType.label),);
                           }).toList(),
@@ -187,18 +231,24 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
 
                       const SizedBox(height: 16),
                       
+                      // Campo con las preferencias que debe tener el conductor
                       ListTile(
                         title: const Text("Preferencias del conductor"),
-                        subtitle: Text(
-                          selectedPreferences!.isEmpty
-                            ? "Ninguna seleccionada"
-                            : "${selectedPreferences!.length} seleccionadas",
-                        ),
+                        subtitle: Text(selectedPreferences == null || selectedPreferences!.isEmpty ? "Ninguna seleccionada" : "${selectedPreferences!.length} seleccionadas"),
                         trailing: const Icon(Icons.arrow_drop_down),
-                        onTap: () => _openPreferencesDialog(),
+                        // Abre una modal para que se seleccionen las que se deseen
+                        onTap: () => _openCheckBoxDialog<DriverPreferences>(
+                          title: "Preferencias del conductor",
+                          allOptions: DriverPreferences.values,
+                          currentSelection: selectedPreferences ?? [],
+                          getLabel: (pref) => pref.label, 
+                          onConfirm: (newSelection) {
+                            setState(() {
+                              selectedPreferences = newSelection;
+                            });
+                          },
+                        ),
                       )
-
-
                     ],
                   ),
                 ),
@@ -206,9 +256,9 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
 
               const SizedBox(height: 24),
 
-              Row(
+              Row( // Botones de control, (cancelar y guardar)
                 children: [
-                  Expanded(
+                  Expanded( // Boton de cancelar
                     child: ElevatedButton(
                       onPressed: () {Navigator.pop(context);
                       },
@@ -222,8 +272,9 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                     ),
                   ),
                   const SizedBox(width: 16),
-                  Expanded(
+                  Expanded( // Boton de guardar
                     child: ElevatedButton(
+                      // Al pulsar, se guardan y mandan a la pantalla de busqueda los datos
                       onPressed: () {Navigator.pop(context, {
                         "role": selectedRole,
                         "radiusOrigin": radiusToOrigin,
@@ -244,41 +295,41 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                   ),
                 ],
               ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    )
     );
   }
 
-
-
-
-  void _openPreferencesDialog() {
-    List<DriverPreferences> tempSelected = List.from(selectedPreferences!);
-
+  // FUncion para construir la modal con la seleccion de elementos de una lista
+  void _openCheckBoxDialog<T>({required String? title, required List<T> allOptions, required List<T>? currentSelection, 
+    required String Function(T) getLabel, required void Function(List<T>) onConfirm}) {
+  
+    List<T> tempSelected = List.from(currentSelection ?? []); // Lista con los elementos seleccionados
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
-            return AlertDialog(
-              title: const Text("Preferencias del conductor"),
+            return AlertDialog( // Se le añade el titulo si tiene
+              title: Text(title ?? "Opciones"),
               content: SizedBox(
                 width: double.maxFinite,
                 child: ListView(
                   shrinkWrap: true,
-                  children: DriverPreferences.values.map((pref) {
-                    return CheckboxListTile(
-                      title: Text(pref.label),
-                      value: tempSelected.contains(pref),
+                  children: allOptions.map((option) {
+                    return CheckboxListTile( // Se crea la lista seleccionable
+                      title: Text(getLabel(option)), 
+                      value: tempSelected.contains(option),
                       onChanged: (checked) {
                         setStateDialog(() {
                           if (checked == true) {
-                            tempSelected.add(pref);
-                          } else {
-                            tempSelected.remove(pref);
+                            tempSelected.add(option);
+                          } 
+                          else {
+                            tempSelected.remove(option);
                           }
                         });
                       },
@@ -286,16 +337,14 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                   }).toList(),
                 ),
               ),
-              actions: [
+              actions: [ // Botones de aceptar y cancelar
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: const Text("Cancelar"),
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    setState(() {
-                      selectedPreferences = tempSelected;
-                    });
+                    onConfirm(tempSelected);
                     Navigator.pop(context);
                   },
                   child: const Text("Aceptar"),
@@ -307,10 +356,4 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
       },
     );
   }
-
-
 }
-
-
-
-

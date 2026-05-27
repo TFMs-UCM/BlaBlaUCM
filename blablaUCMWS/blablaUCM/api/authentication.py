@@ -4,8 +4,9 @@ from rest_framework_simplejwt.settings import api_settings
 from users.models import Users
 
 class UsersJWTAuthentication(JWTAuthentication):
-    """Simple JWT auth using the custom Users model."""
-
+    """
+    Autenticacion de usuarios usando JWT 
+    """
     def get_user(self, validated_token):
         try:
             user_id = validated_token[api_settings.USER_ID_CLAIM]

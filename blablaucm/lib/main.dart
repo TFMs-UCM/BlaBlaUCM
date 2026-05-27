@@ -1,13 +1,23 @@
 import 'package:flutter/material.dart';
-import 'package:blablaucm/screens/home.dart';
+import 'package:blablaucm/screens/login_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
-void main() async{
+// Funcion principal de la aplicacion, se encarga de cargar el .env y como punto de inicio de la app
+
+final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized(); 
+  // Se carga el .env 
+  await dotenv.load(fileName: "assets/.env");
+  // Se inicializa el formato de fechas a español
   await initializeDateFormatting('es_ES', null);
+  // Se llama a runApp para iniciar la aplicacion
   runApp(
-    const ProviderScope( // Para usar Riverpod
+    const ProviderScope(
       child: MyApp(),
     ),
   );
@@ -16,31 +26,28 @@ void main() async{
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
+  // Funcion para construir la pantalla, que se encarga de llamar a LoginScreen como pantalla principal
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'Carpooling UCM',
+      navigatorObservers: [routeObserver], 
+      
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        useMaterial3: true,
       ),
       debugShowCheckedModeBanner: false,
-      home: const HomePage(title: 'Flutter Demo Home Page'),
+      home: const LoginScreen(),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('es', 'ES'),
+        Locale('en', 'US'),
+      ],
     );
   }
 }

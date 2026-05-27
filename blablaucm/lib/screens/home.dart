@@ -8,6 +8,13 @@ import 'package:blablaucm/screens/search_travel.dart';
 import 'package:blablaucm/screens/chats.dart';
 import 'package:blablaucm/screens/profile.dart';
 import 'package:blablaucm/screens/notification_tray.dart';
+import 'package:blablaucm/services/api_service.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:blablaucm/providers/storage_provider.dart';
+import 'package:blablaucm/models/pair.dart';
+import 'package:blablaucm/main.dart';
+
+// Pantalla de inicio
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.title});
@@ -16,40 +23,116 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-
 class _HomePageState extends State<HomePage> with RouteAware {
-  int _selectedIndex = 0;
 
-  // Usuario genérico temporal. En el futuro, cargar desde un WS aquí.
-  late UserModel user;
+  int _selectedIndex = 0; // Indica que pestaña esta en uso
+  UserModel? user;
   late List<Widget> _tabs;
+  bool _isLoadingUser = true;
+  String? _userError;
+  final SecureStorageService _storage = SecureStorageService();
 
-  void _loadUser() {
-   // TODO Implementar la llamada al WS para cargar al usuario
-    user = UserModel(
-      username: "Pacolo",
-      id: "123456",
-      email: "pacolo@email.com",
-      role: UsersType.student,
-      notificationTray: [
-        AppNotification(
-          content: "Esta es una notificación de prueba para verificar el correcto funcionamiento",
-          timestamp: DateTime.now(),
-          isRead: false,
-        ),
-      ],
-    );
+  // Funcion para cargar el usuario, con sus notifiaciones, preferencias y valoraciones
+  Future<void> _loadUser() async {
+    setState(() {
+      _isLoadingUser = true;
+      _userError = null;
+    });
+    try {
+      ApiService apiService = ApiService();
+      // Se crea en endpoint
+      String userEndpoint = "${dotenv.env['USER_ENDPOINT'] ?? '/users/'}${await _storage.getElement('user_id')}";
+      // Se reliza la peticion
+      Map<String, dynamic>? response = await apiService.requestToApi(userEndpoint);
+
+      if (response != null) {
+        user = UserModel.fromJson(response);
+
+        if ((user?.profPicPath ?? '').isNotEmpty) { // Cargar la foto de perfil
+          user!.profilePicture = await apiService.getProfilePicture(user!.profPicPath!);
+        }
+        if (user?.notificationTray == null) { // Cargar las notificaciones 
+          String notificationsEndpoint =
+              dotenv.env['NOTIFICATIONS_ENDPOINT'] ?? '/notifications/';
+
+          Map<String, dynamic>? json = await apiService.requestToApi("$userEndpoint$notificationsEndpoint");
+          if (json != null) {
+            List<AppNotification> allNotifications = [];
+
+            while (json != null) { // Carga las notificaciones
+              allNotifications.addAll(AppNotification.loadNotificationTray(json));
+              String? nextUrl = json['next'];
+              if (nextUrl == null || nextUrl.isEmpty) break;
+              json = await apiService.requestToApi(nextUrl);
+            }
+
+            user!.notificationTray = allNotifications;
+          }
+        }
+        if ((user?.preferences == null || user!.preferences!.isEmpty)) { // Cargar las preferencias
+          String preferencesEndpoint = dotenv.env['PREFERENCES_ENDPOINT'] ?? '/notifications/';
+          Map<String, dynamic>? json = await apiService.requestToApi("$userEndpoint$preferencesEndpoint");
+
+          if (json != null) {
+            List<DriverPreferences> allPreferences = [];
+
+            while (json != null) {
+              allPreferences.addAll(loadUserPreferences(json));
+
+              String? nextUrl = json['next'];
+              if (nextUrl == null || nextUrl.isEmpty) break;
+              json = await apiService.requestToApi(nextUrl);
+            }
+            user!.preferences = allPreferences;
+          }
+        }
+        if (user?.ratings == null ||  user!.ratings!.isEmpty) { // Cargar las valoraciones
+          String ratingsEndpoint = "$userEndpoint${dotenv.env['DRIVER_RATING_ENDPOINT'] ?? '/ratings/'}";
+          
+          Map <String, dynamic>? ratings = await apiService.requestToApi(ratingsEndpoint);
+          if (ratings != null) {
+            List <Pair<RatingsTypes, double>> driverratings = [];
+            for (var entry in ratings['results'].entries) {
+              RatingsTypes? ratingType = parseEnum<RatingsTypes>(entry.key, RatingsTypes.values);
+              if (ratingType != null){
+                driverratings.add(
+                  Pair<RatingsTypes, double>(
+                    first: ratingType,
+                    second: entry.value != null ? entry.value.toDouble() : 0.0,
+                  ),
+                );
+              }
+            }
+            driverratings.sort((a, b) => a.first.label.compareTo(b.first.label));
+            user!.numRatings = (ratings['count'] as num).toInt();
+            user!.ratings = driverratings;
+          }
+        }
+
+      } 
+      else { // Si hay un error, se muestra un mensaje
+        _userError = 'No se pudo cargar el usuario';
+      }
+
+    } 
+    catch (e) { // Si hay un error, se muestra un mensaje
+      _userError = 'Error cargando usuario';
+    }
+    setState(() {
+      _isLoadingUser = false;
+    });
   }
 
+  // Funicion de inicio
   @override
   void initState() {
     super.initState();
-    _loadUser();
-    _tabs = [
+    _loadUser(); // Al cargar la pagina, se carga el usuario y sus datos
+    _tabs = [ // Se cargan los tabs
       PendingTripsCard(
         onGoToMyTrips: () {
           setState(() {
-            _selectedIndex = 2; // índice de "Mis viajes"
+            _selectedIndex = 2;
           });
         },
       ),
@@ -59,10 +142,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
     ];
   }
 
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    RouteObserver<ModalRoute<void>>().subscribe(this, ModalRoute.of(context)!);
+    routeObserver.subscribe(this, ModalRoute.of(context)!);
   }
 
   @override
@@ -71,28 +155,43 @@ class _HomePageState extends State<HomePage> with RouteAware {
     super.dispose();
   }
 
+  // Funcion que se llama al volver a la pantalla
   @override
   void didPopNext() {
-    
     setState(() {
-      _loadUser();
+      //_selectedIndex = 0; 
+
+      //_loadUser(); 
+      // TODO Se podria hacer un refresco de las notificaciones
     });
   }
 
-
+  // Funciuon para construir la pantalla
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingUser) { // Si esta cargabndo al usuario se muestra un spinner de carga
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_userError != null || user == null) { // Si hay un error, se muestra el mensaje
+      return Scaffold(
+        body: Center(
+          child: Text(_userError ?? 'Usuario no disponible'),
+        ),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Carpooling"),
+        title: const Text("BlablaUCM"), // Titulo de la app
         leading: IconButton(
           icon: const Icon(Icons.person, size: 32),
-          tooltip: "Perfil",
+          tooltip: "Perfil", // al pulsar sobre el icono de perfil, te lleva al perfil
           onPressed: () {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => Profile(user: user),
+                builder: (context) => Profile(user: user!),
               ),
             );
           },
@@ -103,43 +202,53 @@ class _HomePageState extends State<HomePage> with RouteAware {
             children: [
               IconButton(
                 icon: const Icon(Icons.mail_outline, size: 32),
-                tooltip: "Notificaciones",
+                tooltip: "Notificaciones", // al pulsar sobre el icono de notificaciones, te lleva a la bandeja de notificaciones
                 onPressed: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => NotificationTrayScreen(user: user),
+                      builder: (context) => NotificationTrayScreen(user: user!),
                     ),
                   );
                 },
               ),
-              if (user.notificationTray != null &&
-                  user.notificationTray!.whereType<AppNotification>().any((n) => !n.isRead))
+              if (user!.notificationTray != null &&
+                  user!.notificationTray!.whereType<AppNotification>().any((n) => !n.isRead))
                 Positioned(
                   right: 10,
                   top: 12,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 18,
-                      minHeight: 18,
-                    ),
-                    child: Text(
-                      user.notificationTray!
-                          .whereType<AppNotification>()
-                          .where((n) => !n.isRead)
-                          .length
-                          .toString(),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NotificationTrayScreen(user: user!),
+                        ),
+                      );
+                    }, 
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      textAlign: TextAlign.center,
+                      constraints: const BoxConstraints(
+                        minWidth: 18,
+                        minHeight: 18,
+                      ),
+                      child: Text(
+                        user!.notificationTray!
+                            .whereType<AppNotification>()
+                            .where((n) => !n.isRead)
+                            .length
+                            .toString(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
                 ),
@@ -147,27 +256,27 @@ class _HomePageState extends State<HomePage> with RouteAware {
           ),
         ],
       ),
-      body: _tabs[_selectedIndex],
-     floatingActionButton: _selectedIndex == 0
-    ? FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const CreatedTravelScreen(),
-            ),
-          );
-        },
-        icon: const Icon(Icons.add),
-        label: const Text("Crear viaje"),
-      )
-    : null,
+      body: _tabs[_selectedIndex], // Si cambias de tab, te lleva a esa pestaña
+      floatingActionButton: _selectedIndex == 0
+          ? FloatingActionButton.extended(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CreatedTravelScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.add),
+              label: const Text("Crear viaje"),
+            )
+          : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed, // opcional pero recomendable
-        backgroundColor: Colors.blueGrey[50], // color de fondo del bar
-        selectedItemColor: Colors.blue, // color del ítem seleccionado
-        unselectedItemColor: Colors.grey, // color de ítems no seleccionados
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Colors.blueGrey[50],
+        selectedItemColor: Colors.blue,
+        unselectedItemColor: Colors.grey,
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
         items: const [
@@ -193,6 +302,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   }
 }
 
+// Clase para construir el widget de viajes pendientes de la pantalla de inicio
 class PendingTripsCard extends StatelessWidget {
   final VoidCallback onGoToMyTrips;
 
@@ -200,10 +310,10 @@ class PendingTripsCard extends StatelessWidget {
     super.key,
     required this.onGoToMyTrips,
   });
-
+  
+  // Funcion para construir el widget
   @override
   Widget build(BuildContext context) {
-    // Más adelante lo rellenarás con datos reales
     final List<String> pendingTrips = [];
 
     return Padding(

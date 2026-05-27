@@ -16,8 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenRefreshView
-from api.views.auth_views import CustomTokenObtainPairView, register_view
+from api.views.auth_views import CustomTokenObtainPairView, register_view, CustomTokenRefreshView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from django.conf import settings
 from django.conf.urls.static import static
@@ -25,13 +24,13 @@ from django.conf.urls.static import static
 urlpatterns = [
     path('admin/', admin.site.urls),
 
-    # Versionado de la API
+    # Se añaden los endpoints de las vistas
     path('api/v1/', include('api.urls')),  
 
     # JWT auth - Custom login endpoint
     path('api/v1/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/register/', register_view, name='register'),
-    path('api/v1/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/v1/auth/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
 
     # Esquema y docs
     path('api/v1/schema/', SpectacularAPIView.as_view(), name='schema'),
