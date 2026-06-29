@@ -56,7 +56,17 @@ extension DriverPreferencesText on DriverPreferences {
   }
 }
 
+// Funcion para cargar las preferencias del conductor desde un JSON
+List<DriverPreferences> loadUserPreferences(Map<String, dynamic> json) {
+  final results = json['results'] as List? ?? [];
+  return results
+      .map((item) => parseEnum<DriverPreferences>(item['pref_type'], DriverPreferences.values))
+      .whereType<DriverPreferences>()
+      .toList();
+}
 
+
+// Enum para los tipos de viaje
 enum TravelType {
   all,
   periodic,
@@ -76,11 +86,12 @@ extension TravelTypeText on TravelType {
     }
 }
 
+// Enum para los tipos de usuarios
 enum UsersType {
-  all,
-  student,
-  professor,
-  universityStuff
+  all, // Representa a todos los usuarios
+  std, // Estudiante
+  prof, // Preofesor
+  unStf // Resto del personal
 }
 
 extension UsersTypeText on UsersType {
@@ -88,37 +99,53 @@ extension UsersTypeText on UsersType {
       switch (this) {
         case UsersType.all:
           return "Todos";
-        case UsersType.student:
+        case UsersType.std:
           return "Alumnos";
-        case UsersType.professor:
+        case UsersType.prof:
           return "Profesores";
-        case UsersType.universityStuff:
+        case UsersType.unStf:
           return "Resto del personal";
       }
     }
 }
 
+// Funcion generia que dado un string y una lista, pasa ese string a su enum correspondiente
+T? parseEnum<T extends Enum>(String? value, List<T> values) {
+  if (value == null || value.isEmpty) return null;
+
+  final normalized = value.toLowerCase();
+
+  try {
+    return values.firstWhere(
+      (e) => e.name.toLowerCase() == normalized,
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+// Enum para los tipos de distintivos medioambientales
 enum EnvSticker {
-  all,
-  eco,
-  b,
-  c,
-  historic,
-  cero,
+  all, // Sin distintivo
+  eco, // ECO
+  b, // B
+  c, // C
+  hist, // Vehiculo historico
+  cero, // CERO
 }
 
 extension EnvStickerText on EnvSticker {
     String get label {
       switch (this) {
         case EnvSticker.all:
-          return "-"; // TODO mirar si se puede sustituir por "Todos"
+          return "-"; 
         case EnvSticker.eco:
           return "ECO";
         case EnvSticker.b:
           return "B";
         case EnvSticker.c:
           return "C";
-        case EnvSticker.historic:
+        case EnvSticker.hist:
           return "H";
         case EnvSticker.cero:
           return "0";
@@ -126,14 +153,26 @@ extension EnvStickerText on EnvSticker {
     }
 }
 
+// Funcion para parsear el distintivo medioambiental desde un string
+extension EnvStickerParser on EnvSticker {
+  static EnvSticker? fromString(String? value) {
+    if (value == null) return null;
 
+    return EnvSticker.values.firstWhere(
+      (e) => e.label.toLowerCase() == value.toLowerCase(),
+      orElse: () => EnvSticker.all,
+    );
+  }
+}
+
+// Enum para los tipos de valoración
 enum RatingsTypes{
   driverSkills,
   punctuality,
   kindness,
   cleanliness,
   flexibility,
-  realiability
+  reliability
 }
 
 extension RatingsTypesText on RatingsTypes{
@@ -149,13 +188,13 @@ extension RatingsTypesText on RatingsTypes{
           return "Limpieza";
         case RatingsTypes.flexibility:
           return "Flexibilidad";
-        case RatingsTypes.realiability:
+        case RatingsTypes.reliability:
           return "Fiabilidad";
       }
     }
 }
 
-
+// Enum para los colores de los vehículos
 enum CarColor {
   white,
   black,
@@ -169,8 +208,10 @@ enum CarColor {
   brown,
   beige,
   burgundy,
+  none
 }
 
+// Extension para obtener el texto de los colores de los vehículos
 extension CarColorLabel on CarColor {
   String get label {
     switch (this) {
@@ -186,14 +227,59 @@ extension CarColorLabel on CarColor {
       case CarColor.brown: return "Marrón";
       case CarColor.beige: return "Beige";
       case CarColor.burgundy: return "Burdeos";
+      case CarColor.none: return "N/A";
     }
   }
 }
 
+CarColor? carColorParser(String? value) {
+  if (value == null) return null;
+  switch (value.toLowerCase()) {
+    case "white":
+    case "blanco":
+      return CarColor.white;
+    case "black":
+    case "negro":
+      return CarColor.black;
+    case "gray":
+    case "gris":
+      return CarColor.gray;
+    case "silver":
+    case "plata":
+      return CarColor.silver;
+    case "blue":
+    case "azul":
+      return CarColor.blue;
+    case "red":
+    case "rojo":
+      return CarColor.red;
+    case "green":
+    case "verde":
+      return CarColor.green;
+    case "yellow":
+    case "amarillo":
+      return CarColor.yellow;
+    case "orange":
+    case "naranja":
+      return CarColor.orange;
+    case "brown":
+    case "marrón":
+      return CarColor.brown;
+    case "beige":
+      return CarColor.beige;
+    case "burgundy":
+    case "burdeos":
+      return CarColor.burgundy;
+    default:
+      return null;
+  }
+}
+
+// Enum para los estados de los viajes
 enum TravelStatus{
-  active,
-  started,
-  finished
+  active, // activo
+  started, // en curso
+  fnd // finalizado
 }
 
 extension TravelStatusLabel on TravelStatus{
@@ -201,17 +287,18 @@ extension TravelStatusLabel on TravelStatus{
     switch(this){
       case TravelStatus.active: return "Activo";
       case TravelStatus.started: return "En curso";
-      case TravelStatus.finished: return "Finalizado";
+      case TravelStatus.fnd: return "Finalizado";
     }
   }
 }
 
+// Enum para los estados de las solicitudes de viaje
 enum RequestStatus{
-  pending,
-  accepted,
-  rejected,
-  validated,
-  unvalidated
+  pending, // pendiente
+  accepted, // aceptada
+  rejected, // rechazada
+  validated, // validada (viaje finalizado y validado por el conductor, para que pueda valorarle)
+  unvalidated // invalidada (viaje finalizado sin ser validado por el conductor, por lo que no puede valorarle)
 }
 
 extension RequestStatusLabel on RequestStatus{
@@ -226,6 +313,7 @@ extension RequestStatusLabel on RequestStatus{
   }
 }
 
+// Enum para los estados del chat
 enum ChatStatus{
   deny,
   allow,
@@ -239,5 +327,49 @@ extension ChatStatusLabel on ChatStatus{
       case ChatStatus.allow: return "Permitido";
       case ChatStatus.silence: return "Silenciado";
     }
+  }
+}
+
+// Enum para las opciones de la API
+enum ApiOptions{
+  get,
+  post,
+  put,
+  delete,
+  patch
+}
+
+// Enum para los códigos de error de la API
+enum ErrorCode {
+  // User Errors
+  userDontExist(0),
+  emailAlreadyExists(1),
+  usernameAlreadyExists(2),
+  userDeleted(3),
+  passwordMismatch(5),
+  invalidCredentials(6),
+  insufficientCredentials(7),
+  tokenExpired(8),
+  incorrectToken(9),
+  userNotVerified(10),
+
+  // Vehicle Errors 
+  licensePlateAlreadyExists(20),
+  licensePlateTooLong(21),
+  vehicleAssociatedToActiveTravel(22),
+  vehicleNotFound(23),
+  vehicleSeatsInsufficient(24),
+  
+  unknownError(-1);
+
+  final int code;
+  const ErrorCode(this.code);
+
+  // funcion para sacar el enum a partir del código de error
+  static ErrorCode fromCode(int code) {
+    return ErrorCode.values.firstWhere(
+      (error) => error.code == code,
+      orElse: () => ErrorCode.unknownError,
+    );
   }
 }

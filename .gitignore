@@ -1,0 +1,17 @@
+blablaUCMWS/.env
+blablaUCMWS/blablaUCM/.env.production
+/blablaUCMWS/blablaUCM/api/__pycache__
+/blablaUCMWS/blablaUCM/api/serializers/__pycache__
+/blablaUCMWS/blablaUCM/api/views/__pycache__
+/blablaUCMWS/blablaUCM/blablaUCM/__pycache__
+/blablaUCMWS/blablaUCM/travels/__pycache__
+/blablaUCMWS/blablaUCM/travels/migrations/__pycache__
+/blablaUCMWS/blablaUCM/users/__pycache__
+/blablaUCMWS/blablaUCM/users/migrations/__pycache__
+blablaucm/.env
+blablaucm/.metadata
+blablaucm/analysis_options.yaml
+blablaucm/assets/.env
+/blablaUCMWS/blablaUCM/users/management/__pycache__
+/blablaUCMWS/blablaUCM/media
+*.pyc

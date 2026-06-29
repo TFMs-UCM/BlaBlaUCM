@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:blablaucm/screens/created_travels.dart';
 import 'package:blablaucm/screens/requested_travels.dart';
 
+// Pantalla para consultar los viajes del usuario
+
 class MyTravelsScreen extends StatelessWidget {
   const MyTravelsScreen({super.key});
 
+  // Funcion para construir la pantalla
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -14,7 +17,7 @@ class MyTravelsScreen extends StatelessWidget {
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: [
+            children: [ // Se le da dos opciones, creados o solicitados
 
               const Text(
                 "¿Qué viajes desea consultar?",
@@ -29,7 +32,7 @@ class MyTravelsScreen extends StatelessWidget {
                 children: [
 
                   ElevatedButton(
-                    onPressed: () {
+                    onPressed: () { // Se abre la pantalla de viajes creados
                       Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -48,7 +51,7 @@ class MyTravelsScreen extends StatelessWidget {
 
                   const SizedBox(width: 20),
 
-                  ElevatedButton(
+                  ElevatedButton( // Se abre la pantalla de viajes solicitados
                     onPressed: () {
                       Navigator.push(
                         context,

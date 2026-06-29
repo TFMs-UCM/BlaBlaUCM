@@ -3,6 +3,7 @@ import 'package:blablaucm/models/message_model.dart';
 import 'package:flutter/material.dart';
 import 'package:blablaucm/screens/chat_details.dart';
 
+// Pantalla para mostrar la lista de chats, futura implementacion
 class ChatsScreen extends StatefulWidget {
   const ChatsScreen({super.key});
 

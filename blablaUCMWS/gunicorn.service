@@ -1,0 +1,26 @@
+[Unit]
+Description=gunicorn daemon for blablaUCM API
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/home/angel/Git/pruebasTFM/blablaUCMWS/blablaUCM
+Environment="PATH=/path/to/venv/bin"
+ExecStart=/path/to/venv/bin/gunicorn \
+    --workers 3 \
+    --worker-class sync \
+    --bind 127.0.0.1:8000 \
+    --timeout 60 \
+    --access-logfile - \
+    --error-logfile - \
+    blablaUCM.wsgi:application
+
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gunicorn
+
+[Install]
+WantedBy=multi-user.target
