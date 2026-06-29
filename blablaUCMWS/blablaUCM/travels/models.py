@@ -152,6 +152,7 @@ class PickUpPoints(models.Model):
             MaxValueValidator(100)
         ]
     )
+    is_reached = models.BooleanField(default=False)
 
     is_deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -246,6 +247,7 @@ class RequestTravels(models.Model):
         editable=False,
         db_column='id_request'
     )
+    validation_code = models.CharField(max_length=20, null=True, blank=True)
     is_deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -272,3 +274,10 @@ class RequestTravels(models.Model):
 
     class Meta:
         db_table = 'request_travels'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['id_travel', 'validation_code'], # El codigo es unico por viaje, no en general
+                condition=Q(is_deleted=False) & Q(validation_code__isnull=False),
+                name='unique_code_per_travel'
+            )
+        ]

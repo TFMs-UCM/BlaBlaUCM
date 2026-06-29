@@ -3,6 +3,7 @@ from travels.models import *
 from django.db import transaction
 from django.contrib.gis.geos import Point
 from api.serializers.user_serializer import UserSerializer, VehicleSerializer
+from django.utils.dateparse import parse_datetime
 
 # Serializer para el modelo Travel
 class TravelSerializer(serializers.ModelSerializer):
@@ -56,7 +57,7 @@ class TravelSerializer(serializers.ModelSerializer):
                 PickUpPoints(
                     id_travel=travel,
                     direction=pick_up_point['direction'],
-                    date= pick_up_point.get('date').date() if pick_up_point.get('date') and hasattr(pick_up_point.get('date'), 'date') else None,
+                    date=pick_up_point.get('date'), # Se le asigna la hora de paso por la parada
                     order_in_travel=pick_up_point['order_in_travel'],
                     point=Point(float(pick_up_point['lng']), float(pick_up_point['lat']), srid=4326)
                 ) for pick_up_point in pick_up_points_data
@@ -76,7 +77,6 @@ class TravelSerializer(serializers.ModelSerializer):
 
         # Se buscan los hijos y se les copia las relaciones
         if pickup_points or denied_users:
-            # Se buscan los viajes que el Trigger acaba de crear
             child_travels = Travel.objects.filter(id_origin_travel=travel)
             
             if child_travels.exists():
@@ -84,19 +84,28 @@ class TravelSerializer(serializers.ModelSerializer):
                 child_denied_users = []
                 
                 for child in child_travels:
-                    # Se copian los puntos
-                    child.origin_point = travel.origin_point
-                    child.destination_point = travel.destination_point
+                    # Se calcula la diferencia de tiempo entre el viaje padre y los hijos
+                    time_diff = child.travel_date - travel.travel_date
+
                     for pp in pickup_points:
+                        # Se parsea la fecha 
+                        original_date = pp.date
+                        if isinstance(original_date, str):
+                            original_date = parse_datetime(original_date)
+                        
+                        # Se le suma el perido entre viajes para poner la fecha correcta
+                        new_date = original_date + time_diff if original_date else None
+
                         child_pickup_points.append(
                             PickUpPoints(
                                 id_travel=child,
                                 direction=pp.direction,
-                                date=pp.date,
+                                date=new_date,
                                 order_in_travel=pp.order_in_travel,
                                 point=pp.point
                             )
                         )
+
                     # Se copian los usuarios denegados
                     for du in denied_users:
                         child_denied_users.append(
@@ -105,6 +114,7 @@ class TravelSerializer(serializers.ModelSerializer):
                                 user_type=du.user_type
                             )
                         )
+                        
                 # Se crean los puntos intermedios y los usuarios denegados
                 if child_pickup_points:
                     PickUpPoints.objects.bulk_create(child_pickup_points)

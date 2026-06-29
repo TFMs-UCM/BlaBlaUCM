@@ -137,7 +137,7 @@ class Notifications(models.Model):
         editable=False,
         db_column='id'
     )
-    content = models.CharField(max_length=300)
+    content = models.CharField(max_length=450)
     date = models.DateTimeField(auto_now_add=True)
 
     read = models.BooleanField(default=False) # Indica si la notificacion ha sido leida o no

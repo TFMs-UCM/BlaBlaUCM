@@ -68,7 +68,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             )
 
         try:
-            user = Users.objects.get(username=username) if '@' not in username else Users.objects.get(email=username)
+            # Se comprueba tanto el nombre de usuario como el email (siempre que no este eliminado)
+            user = Users.objects.get(username=username, is_deleted=False) if '@' not in username else Users.objects.get(email=username, is_deleted=False)
         except Users.DoesNotExist:
             logger.warning("Login failed, user not found: %s", username)
             raise CustomAPIException(

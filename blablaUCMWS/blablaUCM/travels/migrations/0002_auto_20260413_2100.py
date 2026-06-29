@@ -21,7 +21,7 @@ class Migration(migrations.Migration):
         dist_dest float8
     ) 
     LANGUAGE plpgsql
-    AS $$   -- ¡ESTO ES LO QUE FALTABA!
+    AS $$   
     BEGIN
         RETURN QUERY
         SELECT 
@@ -51,7 +51,7 @@ class Migration(migrations.Migration):
             AND (p_date_until IS NULL OR t.travel_date <= p_date_until)
             AND t.state = 'active';
     END;
-    $$;  -- Y AQUÍ SE CIERRA EL BLOQUE
+    $$;  
     """
 
     backward_sql = """

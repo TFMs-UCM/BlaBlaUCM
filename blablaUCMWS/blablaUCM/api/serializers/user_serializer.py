@@ -23,7 +23,8 @@ class UserSerializer(serializers.ModelSerializer):
             "surname1",
             "surname2",
             "user_type",
-            "profile_picture_url"
+            "profile_picture_url",
+            "has_2FA"
         ]
         extra_kwargs = {
             'username': {'validators': []},

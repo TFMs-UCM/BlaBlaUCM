@@ -17,9 +17,9 @@ class Migration(migrations.Migration):
             LANGUAGE plpgsql
             AS $function$
             DECLARE
-                start_date TIMESTAMP := NEW.travel_date;
+                start_date TIMESTAMPTZ := NEW.travel_date;
                 end_date DATE := NEW.end_periodic_date;
-                next_date TIMESTAMP;
+                next_date TIMESTAMPTZ;
             BEGIN
                 -- Solo actuar si el viaje es periódico, los puntuales no hace falta crear nada (solo hay uno)
                 IF NEW.is_periodic = true 
