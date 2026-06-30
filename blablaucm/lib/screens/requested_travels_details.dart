@@ -218,19 +218,6 @@ class _RequestedTravelsDetailsScreenState extends State<RequestedTravelsDetailsS
     // Si no se puntua, se cierra la modal
     if (ratings == null || !mounted) return;
 
-    // Se muestra una modal para confirmar el envio de la puntuacion
-    final shouldSend = await showConfirmationModal(
-      context,
-      title: "Confirmar valoración",
-      message: "¿Deseas enviar esta valoración al conductor?",
-      confirmText: "Aceptar",
-      cancelText: "Cerrar",
-      confirmColor: Colors.green,
-      barrierDismissible: false,
-    );
-
-    if (!shouldSend) return; // Si no confirma, se cierra la modal y no se envia la puntuacion
-
     setState(() => _isLoading = true);
 
     try {

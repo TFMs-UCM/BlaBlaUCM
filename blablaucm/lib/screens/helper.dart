@@ -244,8 +244,10 @@ Future<Map<String, double>?> showDriverRatingsInputModal(BuildContext context, {
     builder: (dialogContext) {
       return StatefulBuilder(
         builder: (context, setDialogState) {
+          final colors = AppColors.of(context);
           return AlertDialog(
-            title: Text(title),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: colors.textPrimary)),
             content: SizedBox(
               width: 420,
               child: SingleChildScrollView(
@@ -257,9 +259,9 @@ Future<Map<String, double>?> showDriverRatingsInputModal(BuildContext context, {
                       Text(subtitle),
                       const SizedBox(height: 12),
                     ],
-                    const Text( // Se le indica al usuario de que las valoraciones son anonimas
+                    Text( // Se le indica al usuario de que las valoraciones son anonimas
                       "Todas las valoraciones son anónimas",
-                      style: TextStyle(fontSize: 13, color: Colors.grey),
+                      style: TextStyle(fontSize: 13, color: colors.textSecondary),
                     ),
                     const SizedBox(height: 12),
                     ...RatingsTypes.values.map((ratingType) {
@@ -310,7 +312,7 @@ Future<Map<String, double>?> showDriverRatingsInputModal(BuildContext context, {
                             const SizedBox(height: 2),
                             Text( // Muestra el valor en numeros para dejarlo mas claro que con las estrellas
                               "${currentValue.toStringAsFixed(1)} / 5.0",
-                              style: const TextStyle(fontSize: 13, color: Colors.grey),
+                              style: TextStyle(fontSize: 13, color: colors.textSecondary),
                             ),
                           ],
                         ),
@@ -329,20 +331,28 @@ Future<Map<String, double>?> showDriverRatingsInputModal(BuildContext context, {
               ),
             ),
             actions: [ // Botones de aceptar y cerrar
-              TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text("Cerrar"),
-              ),
-              ElevatedButton( // Al darle a aceptar, se devuelven las valoraciones
-                onPressed: () {
+              dialogButton(dialogContext, isAccept: false, label: "Cerrar", onPressed: () => Navigator.pop(dialogContext)),
+              dialogButton( // Al darle a aceptar, se devuelven las valoraciones
+                dialogContext,
+                isAccept: true,
+                label: "Aceptar",
+                onPressed: () async {
+                  // Se muestra una modal para confirmar el envio de la puntuacion
+                  final shouldSend = await showConfirmationModal(
+                    context,
+                    title: "Confirmar valoración",
+                    message: "¿Deseas enviar esta valoración al conductor?",
+                    barrierDismissible: false,
+                  );
+
+                  if (!shouldSend) return; // Si no confirma, se cierra la modal y no se envia la puntuacion
+
                   final payload = {
                     for (final entry in selectedRatings.entries)
                       entry.key.name: entry.value,
                   };
-
                   Navigator.pop(dialogContext, payload);
                 },
-                child: const Text("Aceptar"),
               ),
             ],
           );
