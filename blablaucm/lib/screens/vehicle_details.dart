@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:blablaucm/models/vehicle_model.dart';
 import 'package:blablaucm/models/enums.dart';
-import 'package:blablaucm/screens/custom_form_fields.dart'; 
+import 'package:blablaucm/screens/custom_form_fields.dart';
+import 'package:blablaucm/screens/env_sticker_widget.dart';
 
 // Pantalla para mostrar los detalles de un vehiculo, si esta en modo edicion, se permite modificar los campos
 
@@ -53,10 +54,21 @@ class VehicleDetailsScreen extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon( // Se añade un icono de un vehiculo
-                      Icons.directions_car,
-                      size: 70,
-                      color: Colors.blue,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Icon(
+                          Icons.directions_car,
+                          size: 70,
+                          color: Colors.blue,
+                        ),
+                        const SizedBox(width: 6),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: EnvStickerBadge(sticker: v.envSticker, size: 32, showEmpty: true),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 18),
 
@@ -95,15 +107,40 @@ class VehicleDetailsScreen extends StatelessWidget {
                       tooltipText: editMode ? "Indica el número total de asientos del vehículo, incluyendo el del conductor. Debe ser un número entre 2 y 10." : null,
                     ),
                     
-                    // Se añade un menu desplegable para el distintivo ambiental
-                    buildDropdownRow<EnvSticker>(
-                      label: "Distintivo ambiental",
-                      currentValue: v.envSticker,
-                      items: EnvSticker.values,
-                      editMode: editMode,
-                      onChanged: onEnvStickerChanged,
-                      labelGetter: (sticker) => sticker.label,
-                    ),
+                    // El distintivo ambiental se muestra junto al icono del vehiculo en modo visualizacion
+                    // En modo edicion se muestra el desplegable para poder cambiarlo
+                    if (editMode)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            buildLabelWidget("Etiqueta medioambiental", null),
+                            const SizedBox(height: 6),
+                            DropdownButtonFormField<EnvSticker>(
+                              initialValue: v.envSticker,
+                              decoration: const InputDecoration(
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                              ),
+                              items: EnvSticker.values.map((envSticker) {
+                                return DropdownMenuItem(
+                                  value: envSticker,
+                                  child: Row(
+                                    children: [
+                                      EnvStickerBadge(sticker: envSticker == EnvSticker.all ? null : envSticker, showEmpty: true),
+                                      const SizedBox(width: 10),
+                                      Text(envSticker.label),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) => onEnvStickerChanged(value),
+                            ),
+                          ],
+                        ),
+                      ),
                     // Se añade un menu desplegable para el color del vehiculo
                     buildDropdownRow<CarColor>(
                       label: "Color",

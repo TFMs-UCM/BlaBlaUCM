@@ -6,6 +6,7 @@ class RequestTravelModel {
   final String requestId; // id de la solicitud
   final TravelModel travel; // viaje asociado a la solicitud
   final RequestStatus? status; // estado de la solicitud
+  final String? code; // Codigo de la solicitud
 
-  RequestTravelModel({required this.requestId, required this.travel,  this.status,});
+  RequestTravelModel({required this.requestId, required this.travel,  this.status, this.code});
 }

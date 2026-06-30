@@ -6,6 +6,7 @@ import 'package:blablaucm/screens/helper.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/providers/storage_provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 // Pantalla para mostar los detalles de los viajes solicitados
 
@@ -13,12 +14,14 @@ class RequestedTravelsDetailsScreen extends StatefulWidget {
   final TravelModel travel;
   final String requestId;
   final RequestStatus? status;
+  final String? code;
 
   const RequestedTravelsDetailsScreen({
     super.key,
     required this.travel,
     required this.requestId, 
     this.status,
+    this.code,
   });
 
   @override
@@ -88,20 +91,31 @@ class _RequestedTravelsDetailsScreenState extends State<RequestedTravelsDetailsS
                     travel: widget.travel,
                   ),
                 ),
+                
+                // Si el viaje esta aceptado, se muestra un boton para mostar el codigo del viaje en un QR
+                if (widget.status == RequestStatus.accepted && widget.code != null && widget.code!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: AppButtonStyles.primary,
+                        icon: const Icon(Icons.qr_code),
+                        label: const Text("Mostrar QR del viaje"),
+                        onPressed: () => _showQrModal(context),
+                      ),
+                    ),
+                  ),
+
                 if (widget.status == RequestStatus.unvalidated) // Si no esta validado, se puede valorar al conductor
                   Padding( // Se añade un boton para puntuar al conductor
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                     child: SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.amber.shade700,
-                        ),
+                        style: AppButtonStyles.secondary,
                         onPressed: () => _rateDriver(context),
-                        child: const Text(
-                          "Puntuar conductor",
-                          style: TextStyle(color: Colors.white),
-                        ),
+                        child: const Text("Puntuar conductor"),
                       ),
                     ),
                   ),
@@ -110,19 +124,86 @@ class _RequestedTravelsDetailsScreenState extends State<RequestedTravelsDetailsS
                   child: SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                      ),
+                      style: AppButtonStyles.danger,
                       onPressed: () => _deleteTravel(context),
-                      child: const Text(
-                        "Eliminar",
-                        style: TextStyle(color: Colors.white),
-                      ),
+                      child: const Text("Eliminar"),
                     ),
                   ),
                 ),
               ],
             ),
+    );
+  }
+
+  // Funcion para mostrar la modal con el codigo QR
+  void _showQrModal(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text(
+            "Código de Validación", 
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Muestra este código al conductor para que valide tu viaje al subir al coche.",
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: SizedBox(
+                  width: 200,
+                  height: 200,
+                  child: QrImageView(
+                    data: widget.code!,
+                    version: QrVersions.auto,
+                    size: 200.0, 
+                    backgroundColor: Colors.white,
+                    errorCorrectionLevel: QrErrorCorrectLevel.M,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Se muestra el codigo alfanumerico del viaje debajo del QR
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Text(
+                  widget.code!,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 4, 
+                    color: Color(0xFF111827),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text("Cerrar", style: TextStyle(fontSize: 16)),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -259,7 +340,7 @@ class _RequestedTravelsDetailsScreenState extends State<RequestedTravelsDetailsS
           context, 
           "Solicitud eliminada correctamente.",
           title:"Éxito",
-          isError: false,
+          type: AlertType.success,
           backPage: true,
           returnValue: true, // Se pasa true, para que al volver se refresque la lista
           barrierDismissible: false, // No se puede cerrar la modal sin pulsar el boton

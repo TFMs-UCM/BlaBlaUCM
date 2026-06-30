@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:blablaucm/screens/login_screen.dart';
+import 'package:blablaucm/theme/app_theme.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -33,10 +34,9 @@ class MyApp extends StatelessWidget {
       title: 'Carpooling UCM',
       navigatorObservers: [routeObserver], 
       
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.system,
       debugShowCheckedModeBanner: false,
       home: const LoginScreen(),
       localizationsDelegates: const [

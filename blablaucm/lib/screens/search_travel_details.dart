@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/intl.dart';
 import 'package:blablaucm/screens/travel_details.dart';
 import 'package:blablaucm/models/enums.dart';
+import 'package:blablaucm/theme/app_colors.dart';
 import 'package:blablaucm/screens/helper.dart';
 
 // Pantalla para mostrar los detalles de los viajes que se muestran en la busqueda
@@ -69,56 +70,69 @@ class _SearchTravelDetailsScreenState extends State<SearchTravelDetailsScreen> {
 
   // Funcion para manejar las solicitudes, llama a la api con los ids de los viajes que el usuario haya seleccionado 
   Future<void> _handleRequest() async {
-    
-    final List<Map<String, dynamic>> allTrips = []; // Lista de los viajes disponibles
 
-    // Se añade el viaje actual 
-    allTrips.add({
-      "id": widget.travel.id,
-      "date": widget.travel.startDate, 
-      "seats": widget.travel.remainingSeats,
-      "isRequested": widget.travel.isRequested,
-    });
+    List<String> result;
 
-    // Si el viaje es periodico, se añaden los proximos viajes por si el usuario quiere solicitar plaza en alguno futuro tambien
-    if (widget.futureTravels != null && widget.futureTravels!.isNotEmpty) {
-      for (var ft in widget.futureTravels!) {
-        allTrips.add({
-          "id": ft.travelId,
-          "date": ft.date,
-          "seats": ft.remainingSeats,
-          "isRequested": ft.isRequested,
-        });
-      }
-    }
+    if (!widget.travel.isPeriodic) {
+      // Si el viaje es puntual, se piede confirmacion
+      final confirmed = await showConfirmationModal(
+        context,
+        title: "Confirmar solicitud",
+        message: "¿Deseas solicitar una plaza en este viaje?",
+        confirmText: "Solicitar",
+        cancelText: "Cancelar",
+      );
+      if (!confirmed) return;
+      result = [widget.travel.id];
+    } 
+    else {
+      //Si el viaje es periodico, se le muestran los proximos viajes y se le permite seleccioanr varios
+      final List<Map<String, dynamic>> allTrips = [];
 
-    // Se le muestra una modal para que indique que viajes quiere solicitar (si es puntual solo puede seleccioanar el viaje actual)
-    final result = await showDialog<List<String>>(
-      context: context,
-      builder: (context) {
-        List<String> selectedIds = [];
-        // Se selecciona el viaje actual por defecto si tiene plazas (si no las tuviera no apareceria pero por seguridad)
-        if (allTrips.isNotEmpty && allTrips[0]["seats"] > 0) { 
-          selectedIds.add(allTrips[0]["id"]);
+      allTrips.add({
+        "id": widget.travel.id,
+        "date": widget.travel.startDate,
+        "seats": widget.travel.remainingSeats,
+        "isRequested": widget.travel.isRequested,
+      });
+
+      if (widget.futureTravels != null && widget.futureTravels!.isNotEmpty) {
+        for (var ft in widget.futureTravels!) {
+          allTrips.add({
+            "id": ft.travelId,
+            "date": ft.date,
+            "seats": ft.remainingSeats,
+            "isRequested": ft.isRequested,
+          });
         }
+      }
 
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            return AlertDialog(
-              title: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text("Seleccionar viajes"),
-                  widget.travel.isPeriodic && allTrips.length > 1 ? // Si el viaje es periodico y hay viajes futuros, se muestra un mensaje de ayuda
-                  Tooltip(
-                    message: "Se muestran los proximos ${allTrips.length} viajes futuros. Puedes seleccionar uno o varios para solicitar plaza en ellos.",
-                    triggerMode: TooltipTriggerMode.tap, // Hace que se muestre con un solo toque en móvil
-                    child: const Icon(Icons.info_outline, color: Colors.grey),
-                  ): const SizedBox.shrink(),
-                ],
-              ),
-              content: SingleChildScrollView(
-                child: Column(
+      final dialogResult = await showDialog<List<String>>(
+        context: context,
+        builder: (context) {
+          List<String> selectedIds = [];
+          if (allTrips.isNotEmpty && allTrips[0]["seats"] > 0 && allTrips[0]["isRequested"] != true) {
+            selectedIds.add(allTrips[0]["id"]);
+          }
+
+          return StatefulBuilder(
+            builder: (context, setStateDialog) {
+              return AlertDialog(
+                title: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text("Seleccionar viajes"),
+                    allTrips.length > 1
+                        ? Tooltip(
+                            message: "Se muestran los proximos ${allTrips.length} viajes futuros. Puedes seleccionar uno o varios para solicitar plaza en ellos.",
+                            triggerMode: TooltipTriggerMode.tap,
+                            child: const Icon(Icons.info_outline, color: Colors.grey),
+                          )
+                        : const SizedBox.shrink(),
+                  ],
+                ),
+                content: SingleChildScrollView(
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -127,25 +141,22 @@ class _SearchTravelDetailsScreenState extends State<SearchTravelDetailsScreen> {
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 10),
-                      // Generamos los checkboxes dinámicamente
-                      ...allTrips.map((travel) { // Se añaden los viajes que hay en la lista de viajes dsiponibles
+                      ...allTrips.map((travel) {
                         final String id = travel["id"];
                         final DateTime date = travel["date"];
                         final int seats = travel["seats"];
                         final bool isRequested = travel["isRequested"] ?? false;
-                        final bool isAvailable = seats > 0 && !isRequested; // Si hay hueco, se permite seleccionarlo, si no no
-                        
-
+                        final bool isAvailable = seats > 0 && !isRequested;
                         return CheckboxListTile(
                           contentPadding: EdgeInsets.zero,
                           controlAffinity: ListTileControlAffinity.leading,
                           title: Text(DateFormat('dd/MM/yyyy').format(date)),
-                          subtitle: Text( 
                           // Si esta disponible, se muestra el numero de plazas disponibles
                           // Si no, se muestra un mensaje debajo de cada viaje indicando si esta lleno o si ya esta solicitado para que el usuario sepa poruqe no puede solicitarlo
+                          subtitle: Text(
                             isAvailable ? "Plazas disponibles: $seats" : (isRequested ? "Viaje ya solicitado" : "Viaje lleno"),
                             style: TextStyle(
-                              color: isAvailable ? Colors.black54 : Colors.red,
+                              color: isAvailable ? AppColors.of(context).textSecondary : Colors.red,
                               fontWeight: isAvailable ? FontWeight.normal : FontWeight.bold,
                             ),
                           ),
@@ -155,8 +166,7 @@ class _SearchTravelDetailsScreenState extends State<SearchTravelDetailsScreen> {
                                   setStateDialog(() {
                                     if (checked == true) { // Se marca o desmarca los viajes seleccioandos
                                       selectedIds.add(id);
-                                    } 
-                                    else {
+                                    } else {
                                       selectedIds.remove(id);
                                     }
                                   });
@@ -167,27 +177,20 @@ class _SearchTravelDetailsScreenState extends State<SearchTravelDetailsScreen> {
                     ],
                   ),
                 ),
-              actions: [
-                TextButton( // Si se cancela, se cierra la modal
-                  onPressed: () => Navigator.pop(context), 
-                  child: const Text("Cancelar")
-                ),
-                ElevatedButton(
-                  // Si no se ha seleccionado ningun viaje, el boton de solicitar esta deshabilitado
-                  onPressed: selectedIds.isEmpty 
-                      ? null 
-                      : () => Navigator.pop(context, selectedIds),
-                  child: const Text("Solicitar ahora"),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+                actions: [
+                  dialogButton(context, isAccept: false, label: "Cancelar", onPressed: () => Navigator.pop(context)),
+                  dialogButton(context, isAccept: true, label: "Solicitar", onPressed: selectedIds.isEmpty ? null : () => Navigator.pop(context, selectedIds)),
+                ],
+              );
+            },
+          );
+        },
+      );
 
-    // Si se cierra la modal, o no se selecciona ningun viaje, no se hace nada
-    if (result == null || result.isEmpty) return;
+      // Si se cierra la modal, o no se selecciona ningun viaje, no se hace nada
+      if (dialogResult == null || dialogResult.isEmpty) return;
+      result = dialogResult;
+    }
 
     setState(() => _isLoading = true);
     
@@ -232,6 +235,7 @@ class _SearchTravelDetailsScreenState extends State<SearchTravelDetailsScreen> {
                       Navigator.pop(dialogContext);
                       Navigator.of(context).popUntil((route) => route.isFirst);
                     },
+                    style: AppButtonStyles.primary,
                     child: const Text("Aceptar y volver al Inicio"),
                   ),
                 ),
@@ -270,9 +274,10 @@ class _SearchTravelDetailsScreenState extends State<SearchTravelDetailsScreen> {
               height: 50,
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _handleRequest,
+                style: AppButtonStyles.primary,
                 child: _isLoading // Si no se esta cargando, se muestra el boton de solicitar plaza, si no un spinner de carga
-                  ? const CircularProgressIndicator(color: Colors.white) 
-                  : const Text("Solicitar viaje", style: TextStyle(fontSize: 18)),
+                  ? const CircularProgressIndicator(color: Colors.white)
+                  : const Text("Solicitar viaje"),
               ),
             ),
           ),

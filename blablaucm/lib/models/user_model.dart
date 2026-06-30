@@ -12,6 +12,7 @@ class UserModel {
   String surname1; // primer apellido del usuario
   String? surname2; // segundo apellido del usuario
   String email; // email
+  bool? has2FA; // si el usuario tiene 2FA activado
   String? profPicPath; // ruta de la imagen de perfil del usuario
   UsersType role; // Tipo de usuario que es
   int? numRatings; // Numero de valoraciones que tiene el usuario
@@ -35,7 +36,8 @@ class UserModel {
     this.ratings,
     this.profPicPath,
     this.vehicles,
-    this.notificationTray
+    this.notificationTray,
+    this.has2FA = true
   });
 
   // Creacion del usuario a partir de un JSON
@@ -54,6 +56,7 @@ class UserModel {
       email: json['email'] ?? '',
       role: parseEnum<UsersType>(json['user_type'], UsersType.values) ?? UsersType.std,
       profPicPath: profilePicPath,
+      has2FA: json['has_2FA'] ?? true,
     );
   }
 

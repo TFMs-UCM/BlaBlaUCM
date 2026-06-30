@@ -352,14 +352,40 @@ enum ErrorCode {
   tokenExpired(8),
   incorrectToken(9),
   userNotVerified(10),
+  emailError(11),
 
-  // Vehicle Errors 
+  // Vehicle Errors
   licensePlateAlreadyExists(20),
   licensePlateTooLong(21),
   vehicleAssociatedToActiveTravel(22),
   vehicleNotFound(23),
   vehicleSeatsInsufficient(24),
-  
+
+  // Travel Errors
+  travelDontExist(30),
+  travelAlreadyDeleted(31),
+  travelNotFound(32),
+  travelAlreadyExists(33),
+  travelIsFull(34),
+  travelIsNotPeriodic(35),
+  travelIsNotPunctual(36),
+  fromDateRequired(37),
+  toDateRequired(38),
+  requestOwnTravel(39),
+  alreadyRequested(40),
+  invalidPeriodicInterval(41),
+  seatsBelowOccupied(42),
+  invalidValidationCode(43),
+  pickupPointNotFound(44),
+  travelAlreadyStarted(45),
+
+  // Travel Request Errors
+  invalidRequestStatus(60),
+
+  // General Errors
+  missingRequiredField(50),
+  internalServerError(99),
+
   unknownError(-1);
 
   final int code;
@@ -372,4 +398,12 @@ enum ErrorCode {
       orElse: () => ErrorCode.unknownError,
     );
   }
+}
+
+// Enum para los tipos de alertas
+enum AlertType{
+  error,
+  success,
+  warning,
+  info
 }

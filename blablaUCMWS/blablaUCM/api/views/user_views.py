@@ -13,6 +13,7 @@ from rest_framework.response import Response
 from api.errors import ErrorCodes
 from rest_framework import status
 from django.db import connection
+from django.db.models import Q
 import logging
 import os
 from services.email.email_service import Email
@@ -330,11 +331,15 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         try:
             qs = user.created_travels.filter(is_deleted=False)
 
-            if travel_type == 'pending': # Si era pendientes, se sacan los futuros
-                qs = qs.filter(travel_date__gte=today).order_by('travel_date')
+            if travel_type == 'pending':
+                qs = qs.filter(
+                    Q(travel_date__gte=today, state__code='active') | Q(state__code='started')
+                ).order_by('travel_date')
 
-            elif travel_type == 'past': # Si eran pasados, se sacan los anteriores a hoy
-                qs = qs.filter(travel_date__lt=today).order_by('-travel_date')
+            elif travel_type == 'past':
+                qs = qs.filter(
+                    Q(travel_date__lt=today) | Q(state__code='fnd')
+                ).order_by('-travel_date')
 
             logger.info(f"Successfully retrieved travels for user ID: {user.id} with type: {travel_type}")
             return self.paginated_response(
@@ -379,13 +384,11 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
                 # Si son active, se sacan las que estan aceptadas pero aun no se ha realizado el viaje
                 qs = qs.filter(
                         status__code='accepted',
-                        id_travel__travel_date__gte=today
                     ).order_by('id_travel__travel_date')
 
             elif request_type == 'past': # Si son past, son las solicitudes que ya se han realizado
                 qs = qs.filter(
                         status__code__in=['validated', 'unvalidated'],
-                        id_travel__travel_date__lt=today
                     ).order_by('-id_travel__travel_date')
 
             logger.info(f"Successfully retrieved {request_type} requests for user ID: {user.id}")
@@ -712,7 +715,7 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
     def get_next_travel(self, request, *args, **kwargs):
         """
         Endpoint GET /users/next_travel/
-        Devuelve los siguientes 3 viajes del usuario, si no tiene devuelve null
+        Devuelve el siguiente viaje activo del usuario, si no tiene devuelve null
         """
         user = self.get_object()
         today = timezone.now().date()
@@ -721,7 +724,11 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         logger.info(f"Accessed get_next_travel endpoint for user ID: {user.id}")
 
         try:
-            created_travels = list(user.created_travels.filter(travel_date__gte=today, state='active', is_deleted=False).order_by('travel_date')[:max_travels])
+            started_travel = user.created_travels.filter(state='started', is_deleted=False).order_by('travel_date').first()
+
+            remaining = max_travels - (1 if started_travel else 0)
+
+            created_travels = list(user.created_travels.filter(state='active', is_deleted=False).order_by('travel_date')[:remaining])
 
             requested_reqs = list(
                 RequestTravels.objects.filter(
@@ -731,19 +738,20 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
                     id_travel__state='active',
                     id_travel__is_deleted=False,
                     is_deleted=False,
-                ).order_by('id_travel__travel_date').select_related('id_travel', 'status')[:max_travels]
+                ).order_by('id_travel__travel_date').select_related('id_travel', 'status')[:remaining]
             )
             
             # Se combinan los viajes creados y solicitados, para sacar los siguientes 3 viajes
             candidates = [(t, False, None) for t in created_travels] + [(req.id_travel, True, req) for req in requested_reqs]
+            candidates.sort(key=lambda x: x[0].travel_date)
+            candidates = candidates[:remaining]
+
+            if started_travel:
+                candidates = [(started_travel, False, None)] + candidates
 
             if not candidates:
                 logger.info(f"No travels found for user ID: {user.id}")
                 return Response({"error": "No upcoming travels found", "error_code": ErrorCodes.TRAVEL_DONT_EXIST}, status=status.HTTP_404_NOT_FOUND)
-
-            # Se ordenan por fecha y se cogen los 3 primeros
-            candidates.sort(key=lambda x: x[0].travel_date)
-            candidates = candidates[:max_travels]
 
             result = []
             for travel, is_request, req_obj in candidates:

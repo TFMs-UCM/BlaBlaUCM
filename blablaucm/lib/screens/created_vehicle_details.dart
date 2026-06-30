@@ -1,3 +1,4 @@
+import 'package:blablaucm/screens/env_sticker_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:blablaucm/models/vehicle_model.dart';
 import 'package:blablaucm/models/enums.dart';
@@ -77,8 +78,15 @@ class _CreatedVehicleDetailsScreenState extends State<CreatedVehicleDetailsScree
       "id_user": userId,
     };
 
-    setState(() => isSaving = true);
+    
+    if(!mounted) return;
 
+    final confirm = await showConfirmationModal(context, title: "Confirmación", message: "¿Deseas crear este vehículo?");
+
+    if (!confirm) {
+      return;
+    }
+    setState(() => isSaving = true);
     try {
       // Se crea la url
       final endpoint = "/vehicles/";
@@ -87,7 +95,7 @@ class _CreatedVehicleDetailsScreenState extends State<CreatedVehicleDetailsScree
       
       // Si la respeusta es nula o tiene un error, muestra un mensaje de error
       if (response == null || response["error"] != null) {
-        if (!context.mounted) return;
+        if (!mounted) return;
         final errorMessage = response?["error"]["message"] ?? "Error al crear vehículo";
         showModal(context, errorMessage);
       } 
@@ -104,8 +112,8 @@ class _CreatedVehicleDetailsScreenState extends State<CreatedVehicleDetailsScree
         );
 
         widget.onSave(vehicle);
-        if (!context.mounted) return;
-        Navigator.pop(context);
+        if (!mounted) return;
+        showModal(context, "Vehículo creado correctamente", title: "Éxito", type: AlertType.success, barrierDismissible: false, backPage: true);
       }
     } 
     catch (e) { // Si hay un error no manejado, se muestra un mensaje de error generico
@@ -173,15 +181,38 @@ class _CreatedVehicleDetailsScreenState extends State<CreatedVehicleDetailsScree
                         // Se muestra un mensaje de ayuda para el usuario
                         tooltipText: "Indica el número total de asientos del vehículo, incluyendo el del conductor. Debe ser un número entre 2 y 10.",
                       ),
-                      
-                      buildDropdownRow<EnvSticker>( // Campo del distintivo ambiental
-                        label: "Distintivo ambiental",
-                        currentValue: envSticker,
-                        items: EnvSticker.values,
-                        editMode: true,
-                        onChanged: (val) => setState(() => envSticker = val),
-                        labelGetter: (e) => e.label,
+                     Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            buildLabelWidget("Etiqueta medioambiental", null),
+                            const SizedBox(height: 6),
+                            DropdownButtonFormField<EnvSticker>(
+                              initialValue: envSticker,
+                              decoration: const InputDecoration(
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                              ),
+                              items: EnvSticker.values.map((envSticker) {
+                                return DropdownMenuItem(
+                                  value: envSticker,
+                                  child: Row(
+                                    children: [
+                                      EnvStickerBadge(sticker: envSticker == EnvSticker.all ? null : envSticker, showEmpty: true),
+                                      const SizedBox(width: 10),
+                                      Text(envSticker.label),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (val) => setState(() => envSticker = val),
+                            ),
+                          ],
+                        ),
                       ),
+                      
                       buildDropdownRow<CarColor>( // Campo del color
                         label: "Color",
                         currentValue: carColor,
@@ -200,6 +231,7 @@ class _CreatedVehicleDetailsScreenState extends State<CreatedVehicleDetailsScree
                                 Expanded(
                                   child: ElevatedButton( // Boton de cancelar
                                     onPressed: () => Navigator.pop(context),
+                                    style: AppButtonStyles.secondary,
                                     child: const Text("Cancelar"),
                                   ),
                                 ),
@@ -207,6 +239,7 @@ class _CreatedVehicleDetailsScreenState extends State<CreatedVehicleDetailsScree
                                 Expanded(
                                   child: ElevatedButton( // Boton de guardar
                                     onPressed: _save, // El checkeo de los campos se hace al pulsar en guardar
+                                    style: AppButtonStyles.primary,
                                     child: const Text("Guardar"),
                                   ),
                                 ),

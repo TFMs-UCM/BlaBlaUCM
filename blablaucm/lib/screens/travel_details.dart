@@ -4,21 +4,26 @@ import 'package:intl/intl.dart';
 import 'package:blablaucm/models/travel_model.dart';
 import 'package:blablaucm/screens/helper.dart';
 import 'package:blablaucm/models/pair.dart';
+import 'package:blablaucm/models/pick_up_points_model.dart';
 import 'package:blablaucm/screens/travel_edit.dart';
 import 'package:blablaucm/screens/edit_pickup_points.dart';
-
+import 'package:blablaucm/services/api_service.dart';
+import 'package:blablaucm/screens/env_sticker_widget.dart';
+import 'package:blablaucm/theme/app_colors.dart';
 // Pantalla que muestra la vista detallada de un viaje con toda la informacion
 
 class TravelDetailsScreen extends StatefulWidget {
   final TravelModel travel; // Los datos del viaje
   final bool canManagePassengers; // Si puede o no modificar pasajeros
   final Future<bool> Function(String passengerUsername)? onRemovePassenger; // Funcion que se llamara al eliminar un pasajero
+  final VoidCallback? onEdited; // Callback que se llama tras editar el viaje con exito
 
   const TravelDetailsScreen({
     super.key,
     required this.travel,
     this.canManagePassengers = false,
     this.onRemovePassenger,
+    this.onEdited,
   });
 
   @override
@@ -27,14 +32,84 @@ class TravelDetailsScreen extends StatefulWidget {
 
 class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
 
-  // Colores que se van a usar en la pantalla
-  static const Color colorPrimary = Color(0xFF4F46E5); 
-  static const Color colorPrimaryDark = Color(0xFF4338CA); 
-  static const Color colorSuccess = Color(0xFF10B981);
-  static const Color textGray900 = Color(0xFF111827);
-  static const Color textGray700 = Color(0xFF374151);
-  static const Color textGray500 = Color(0xFF6B7280);
-  static const Color borderLight = Color(0xFFF3F4F6);
+  final ApiService _api = ApiService();
+  final Map<String, Future<Image?>> _profilePicFutures = {};
+
+  static const Color colorPrimary = AppColors.primary;
+  static const Color colorPrimaryDark = AppColors.primaryDark;
+  static const Color colorSuccess = AppColors.success;
+
+  AppColors get _c => AppColors.of(context);
+  Color get textGray900 => _c.textPrimary;
+  Color get textGray700 => _c.textSecondary;
+  Color get textGray500 => _c.textSecondary;
+  Color get borderLight => _c.border;
+  Color get cardColor => _c.card;
+
+  // Funcion para obtener las fotos de perfil de los integrantes
+  Future<Image?> _getProfilePictureFuture(String? path) {
+    if (path == null || path.isEmpty) return Future.value(null);
+    if (!_profilePicFutures.containsKey(path)) {
+      _profilePicFutures[path] = _api.getProfilePicture(path);
+    }
+    return _profilePicFutures[path]!;
+  }
+
+  // Widget para mostrar la foto de de perfil o sus iniciales sin no tienen foto
+  Widget _buildProfilePicture(String? path, String username, double radius) {
+    if (path == null || path.isEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: colorPrimary.withValues(alpha: 0.1),
+        child: Text(
+          _passengerInitials(username),
+          style: TextStyle(
+            color: colorPrimaryDark,
+            fontWeight: FontWeight.bold,
+            fontSize: radius * 0.8, 
+          ),
+        ),
+      );
+    }
+
+    return FutureBuilder<Image?>(
+      future: _getProfilePictureFuture(path),
+      builder: (context, snapshot) {
+        // Mientras carga se muestra un spinner de carga
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return CircleAvatar(
+            radius: radius,
+            backgroundColor: Colors.grey.shade200,
+            child: SizedBox(
+              width: radius,
+              height: radius,
+              child: const CircularProgressIndicator(strokeWidth: 2),
+            ),
+          );
+        }
+        if (snapshot.hasData && snapshot.data != null) {
+          return CircleAvatar(
+            radius: radius,
+            backgroundImage: snapshot.data!.image,
+            backgroundColor: Colors.transparent,
+          );
+        }
+        // Si no tiene foto de perfil, se muestran sus iniciales
+        return CircleAvatar(
+          radius: radius,
+          backgroundColor: colorPrimary.withValues(alpha: 0.1),
+          child: Text(
+            _passengerInitials(username),
+            style: TextStyle(
+              color: colorPrimaryDark,
+              fontWeight: FontWeight.bold,
+              fontSize: radius * 0.8,
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   // Funcion para calcular la valoracion media
   double _calculateAverageRating(List<Pair<RatingsTypes, double>>? ratings) {
@@ -62,7 +137,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
     
     // En caso de que quiera modificar el viaje
     // Se redicrige al usaurio a la pantalla de editar viaje
-    Navigator.push(
+    final result = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (context) => TravelEditScreen(
@@ -80,6 +155,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
         ),
       ),
     );
+    if (result == true && mounted) widget.onEdited?.call();
   }
 
   // Funcion para crear la pantalla
@@ -119,49 +195,54 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                           blurRadius: 4,
                           spreadRadius: 1,
                         )
-                      ], // TODO Añadir que se muestre la foto de perfil del conductor en lugar de un icono
+                      ],
                     ),
-                    child: const Icon(Icons.person, size: 36, color: colorPrimary),
+                    child: _buildProfilePicture(driver.profPicPath, driver.username, 40),
                   ),
                   const SizedBox(height: 12),
-                  Text( // Se muestra el nombre de usuario del conductor
-                    driver.username,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      color: textGray900,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: borderLight),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.03),
-                          blurRadius: 2,
-                          offset: const Offset(0, 1),
-                        )
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [ // Se añade la valoracion media del conductor con numeros y estrellas
-                        const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          avgRating.toStringAsFixed(1),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: textGray700,
-                          ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text( // Se muestra el nombre de usuario del conductor
+                        driver.username,
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: textGray900,
                         ),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: borderLight),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.03),
+                              blurRadius: 2,
+                              offset: const Offset(0, 1),
+                            )
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [ // Se añade la valoracion media del conductor con numeros y estrellas
+                            const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
+                            const SizedBox(width: 4),
+                            Text(
+                              avgRating.toStringAsFixed(1),
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: textGray700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   InkWell( // Al pulsar sobre "Mas informacion" se muestra un modal con la informacion del conductor de valoraciones y preferencias
@@ -192,7 +273,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
 
             Container( // DEtalles del viaje
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: cardColor,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: borderLight),
                 boxShadow: [
@@ -216,7 +297,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                           children: [ // Texto con Origen -> Destino
                             Text( // Origen
                               widget.travel.origin,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
                                   color: textGray900,
@@ -228,7 +309,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                             ),
                             Text( // Destino
                               widget.travel.destination,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
                                   color: textGray900,
@@ -246,7 +327,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                               color: borderLight,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.edit, size: 16, color: textGray500),
+                            child: Icon(Icons.edit, size: 16, color: textGray500),
                           ),
                         ),
                     ],
@@ -260,7 +341,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                         child: Icon(Icons.calendar_today, size: 16, color: Colors.grey.shade400),
                       ),
                       const SizedBox(width: 12),
-                      Text(fecha, style: const TextStyle(color: textGray700, fontSize: 15)),
+                      Text(fecha, style: TextStyle(color: textGray700, fontSize: 15)),
                     ],
                   ),
                   const SizedBox(height: 16),
@@ -292,33 +373,43 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [ // Origen
                             Text(widget.travel.origin,
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     color: textGray900,
                                     fontSize: 15)
                             ),
-                            Text(startTime, style: const TextStyle(color: textGray500, fontSize: 13)),
+                            Text(startTime, style: TextStyle(color: textGray500, fontSize: 13)),
                             const SizedBox(height: 16),
                             Text(widget.travel.destination, // Destino
-                                style: const TextStyle(
+                                style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     color: textGray900,
                                     fontSize: 15)
                             ),
-                            Text(endTime,style: const TextStyle(color: textGray500, fontSize: 13)),
+                            Text(endTime,style: TextStyle(color: textGray500, fontSize: 13)),
                           ],
                         ),
                       ),
                     ],
                   ),
 
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Divider(color: borderLight, height: 1),
                   ),
 
                   // Resto de detalles, vehiculo, asientos, colectivo del conductor y tipo de viaje
-                  _infoRow(Icons.directions_car, "${widget.travel.vehicle.model} ${widget.travel.vehicle.brand} (${widget.travel.vehicle.envSticker!.label})",false),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 24, child: Icon(Icons.directions_car, size: 16, color: Colors.grey.shade400)),
+                        const SizedBox(width: 12),
+                        Expanded(child: Text("${widget.travel.vehicle.brand} ${widget.travel.vehicle.model}", style: TextStyle(color: textGray700, fontSize: 15))),
+                        EnvStickerBadge(sticker: widget.travel.vehicle.envSticker),
+                      ],
+                    ),
+                  ),
                   _infoRow(Icons.event_seat, "Asientos disponibles: ", true, widget.travel.remainingSeats.toString()),
                   _infoRow(Icons.groups, "Colectivo: ", true, driver.role.label),
                   _infoRow(Icons.update, "Tipo: ", true, widget.travel.isPeriodic ? "Periódico" : "Puntual"),
@@ -368,13 +459,13 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
           Expanded(
             child: RichText(
               text: TextSpan(
-                style: const TextStyle(color: textGray700, fontSize: 15),
+                style: TextStyle(color: textGray700, fontSize: 15),
                 children: [
                   TextSpan(text: text),
                   if (hasHighlight) // Si esta destacado, el texto se pone destacado
                     TextSpan(
                       text: highlight,
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: textGray900),
+                      style: TextStyle(fontWeight: FontWeight.bold, color: textGray900),
                     ),
                 ],
               ),
@@ -424,7 +515,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
 
   // Funcion para mostrar una modal con los pasajeros que hay en el viaje, si el usuario tiene permisos para gestionar pasajeros, puede eliminar pasajeros
   void _showPassengersDialog(BuildContext context) {
-    final passengers = List<String>.from(widget.travel.passengers ?? const <String>[]);
+    final passengers = List<Pair<String, String?>>.from(widget.travel.passengers ?? const <Pair<String, String?>>[]);
 
     showDialog(
       context: context,
@@ -457,7 +548,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
               }
 
               setDialogState(() {
-                passengers.remove(passengerUsername);
+                passengers.removeWhere((p) => p.first == passengerUsername);
                 widget.travel.addPassengers(passengers);
               });
               // Si se ha eliminado correctamente, se muestra un mensaje de exito
@@ -465,7 +556,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                 context,
                 title: "Éxito",
                 "$passengerUsername se ha eliminado correctamente del viaje.",
-                isError: false,
+                type: AlertType.success,
               );
             }
 
@@ -547,11 +638,11 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                             )
                           : ListView.separated( // Si hay pasajeros, se muestra una lista con los pasajeros, 
                               // mostrando por cada uno de ellos su nombre de usuario y un icono con sus iniciales 
-                              // TODO en lugar de las iniciales, se podria cambiar a la foto de perfil de ese pasajero
                               itemCount: passengers.length,
                               separatorBuilder: (_, _) => const SizedBox(height: 10),
                               itemBuilder: (context, index) {
-                                final passengerUsername = passengers[index];
+                                final passengerUsername = passengers[index].first;
+                                final passengerProfilePicture = passengers[index].second;
                                 return Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 12,
@@ -564,17 +655,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                                   ),
                                   child: Row(
                                     children: [
-                                      CircleAvatar(
-                                        radius: 18,
-                                        backgroundColor: colorPrimary.withValues(alpha: 0.1),
-                                        child: Text( // Iniciales del pasajero
-                                          _passengerInitials(passengerUsername),
-                                          style: const TextStyle(
-                                            color: colorPrimaryDark,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ),
+                                      _buildProfilePicture(passengerProfilePicture, passengerUsername, 18),
                                       const SizedBox(width: 12),
                                       Expanded(
                                         child: Text(
@@ -606,7 +687,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: () => Navigator.pop(dialogContext),
-                        child: const Text("Cerrar", style: TextStyle(color: textGray700)),
+                        child: Text("Cerrar", style: TextStyle(color: textGray700)),
                       ),
                     ),
                   ],
@@ -634,7 +715,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     "Info. del Conductor",
                     style: TextStyle(
                       fontSize: 18,
@@ -643,11 +724,11 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const TabBar(
+                  TabBar(
                     labelColor: colorPrimary,
                     unselectedLabelColor: textGray500,
                     indicatorColor: colorPrimary,
-                    tabs: [
+                    tabs: const [
                       Tab(icon: Icon(Icons.star_rate), text: "Valoraciones"), // Pestaña de valoraciones
                       Tab(icon: Icon(Icons.settings), text: "Preferencias"), // Pestaña de preferencias
                     ],
@@ -669,7 +750,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                     alignment: Alignment.centerRight,
                     child: TextButton(
                       onPressed: () => Navigator.pop(context),
-                      child: const Text("Cerrar", style: TextStyle(fontSize: 15, color: textGray700)),
+                      child: Text("Cerrar", style: TextStyle(fontSize: 15, color: textGray700)),
                     ),
                   ),
                 ],
@@ -720,7 +801,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                 Stack(
                   alignment: Alignment.center,
                   children: [
-                    const Text( // Se añade el titulo
+                    Text( // Se añade el titulo
                       "Recorrido del viaje",
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -754,6 +835,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                                     initialPoints: widget.travel.pickUpPoints ?? [],
                                     travelId: widget.travel.id,
                                     travelDate: widget.travel.startDate,
+                                    hasPassengers: widget.travel.passengers?.isNotEmpty ?? false,
                                   ),
                                 ),
                               );
@@ -761,18 +843,18 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                               // Se actualizan las paradas con los nuevos cambios si se han modificado
                               if (updatedPoints != null && context.mounted) {
                                 setState(() {
-                                  widget.travel.pickUpPoints = updatedPoints;
+                                  widget.travel.pickUpPoints = (updatedPoints as List).map<PickUpPointModel>((p) => p.first as PickUpPointModel).toList();
                                 });
                               }
                             }
                           },
                           child: Container( // Icono para editar
                             padding: const EdgeInsets.all(8),
-                            decoration: const BoxDecoration(
+                            decoration: BoxDecoration(
                               color: borderLight,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.edit, size: 18, color: textGray500),
+                            child: Icon(Icons.edit, size: 18, color: textGray500),
                           ),
                         ),
                       ),
@@ -843,7 +925,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                                   child: Text(
                                     hora, // Se pone la hora de paso a la derecha
                                     textAlign: TextAlign.right,
-                                    style: const TextStyle(fontSize: 14, color: textGray500),
+                                    style: TextStyle(fontSize: 14, color: textGray500),
                                   ),
                                 ),
                                 SizedBox(
@@ -892,7 +974,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                 const SizedBox(height: 16),
                 TextButton( // Boton para cerrar la modal
                   onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text("Cerrar", style: TextStyle(color: textGray700)),
+                  child: Text("Cerrar", style: TextStyle(color: textGray700)),
                 ),
               ],
             ),

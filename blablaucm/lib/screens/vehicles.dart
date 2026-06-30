@@ -7,6 +7,8 @@ import 'package:blablaucm/services/api_service.dart';
 import 'package:blablaucm/providers/storage_provider.dart';
 import 'package:blablaucm/screens/helper.dart';
 import 'package:blablaucm/services/vehicles_service.dart';
+import 'package:blablaucm/screens/env_sticker_widget.dart';
+import 'package:blablaucm/theme/app_colors.dart';
 
 // Pantalla para mostrar los vehiculos del usuario
 
@@ -107,6 +109,8 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
   // Funcion para construir la pantalla
   @override
   Widget build(BuildContext context) {
+    final c = AppColors.of(context);
+
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(),
@@ -125,17 +129,19 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                     )
                   : ListView.builder( // Si hay vehiculos, se muestra la lista de vehiculos
                       controller: _controller,
-                      padding: const EdgeInsets.only(bottom: 100, top: 8), 
+                      padding: const EdgeInsets.only(bottom: 100, top: 8),
                       itemCount: localVehicles.length + (isLoadingMore ? 2 : 0),
                       itemBuilder: (context, index) {
                         if (index < localVehicles.length) {
                           final v = localVehicles[index];
 
-                          return Card( // Se muestran los detalles del vehiculo en un card
+                          return Container( // Se muestran los detalles del vehiculo en un card
                             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            elevation: 3,
-                            shape: RoundedRectangleBorder(
+                            decoration: BoxDecoration(
+                              color: c.card,
                               borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: c.border, width: 1),
+                              boxShadow: c.isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 10, offset: const Offset(0, 4))],
                             ),
                             child: InkWell( // Al pulsar sobre un vehiculo, se abre una nueva pantalla con los detalles del vehiculo
                               borderRadius: BorderRadius.circular(16),
@@ -145,7 +151,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                                   MaterialPageRoute(
                                     builder: (context) => VehicleDetailsProfileScreen(
                                       vehicle: v,
-                                      onDelete: (veh) { // Se se elimina, se quita de la lista
+                                      onDelete: (veh) { // Si se elimina, se quita de la lista
                                         setState(() {
                                           localVehicles.removeWhere((x) => x.id == veh.id);
                                         });
@@ -166,29 +172,36 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                                 padding: const EdgeInsets.all(16),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.directions_car, size: 36),
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(Icons.directions_car, color: AppColors.primary, size: 28),
+                                    ),
                                     const SizedBox(width: 16),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            v.vehiclePreview(),
-                                            style: const TextStyle(
+                                            v.vehiclePreview,
+                                            style: TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.bold,
+                                              color: c.textPrimary,
                                             ),
                                           ),
                                           const SizedBox(height: 4),
-                                          // Se muestra la matricula, numero de asientos, etiqueta ambiental y color del vehiculo
-                                          Text("Matrícula: ${v.plate}"),
-                                          Text("Asientos: ${v.numSeats}"),
-                                          Text("Etiqueta: ${v.envSticker?.label ?? 'N/A'}"),
-                                          Text("Color: ${v.color?.label ?? 'N/A'}"),
+                                          // Se muestra la matricula, numero de asientos y color del vehiculo
+                                          Text("Matrícula: ${v.plate}", style: TextStyle(color: c.textSecondary)),
+                                          Text("Asientos: ${v.numSeats}", style: TextStyle(color: c.textSecondary)),
+                                          Text("Color: ${v.color?.label ?? 'N/A'}", style: TextStyle(color: c.textSecondary)),
                                         ],
                                       ),
                                     ),
-                                    const Icon(Icons.chevron_right),
+                                    EnvStickerBadge(sticker: v.envSticker, size: 36, showEmpty: true),
                                   ],
                                 ),
                               ),

@@ -24,11 +24,49 @@ class Profile extends StatefulWidget {
 
 class _ProfileState extends State<Profile> {
   final ApiService api = ApiService();
-  final SecureStorageService storage = SecureStorageService(); // 
+  final SecureStorageService storage = SecureStorageService();
+  bool _isToggling2FA = false;
 
   // Funcion para refrescar la UI
   void _refreshUI() {
     setState(() {});
+  }
+
+  // Funcion para activar o desactivar el 2FA
+  Future<void> _toggle2FA(bool value) async {
+    if (_isToggling2FA) return;
+
+    final bool confirm = await showConfirmationModal(
+      context,
+      title: value ? "Activar verificación en dos pasos" : "Desactivar verificación en dos pasos",
+      message: value
+          ? "¿Estás seguro de que deseas activar la verificación en dos pasos? Se te pedirá un código cada vez que inicies sesión."
+          : "¿Estás seguro de que deseas desactivar la verificación en dos pasos? Hacer esto reducirá la seguridad de tu cuenta.",
+    );
+    if (!confirm) return;
+
+    setState(() => _isToggling2FA = true);
+
+    final endpoint = "${dotenv.env['USER_ENDPOINT'] ?? '/users/'}${widget.user.id}/";
+    final response = await api.requestToApi(
+      endpoint,
+      requireAuthentication: true,
+      op: ApiOptions.patch,
+      body: {'has_2FA': value},
+    );
+
+    if (!mounted) return;
+
+    if (response != null && response['error'] == null) {
+      setState(() {
+        widget.user.has2FA = value;
+        _isToggling2FA = false;
+      });
+    } 
+    else {
+      setState(() => _isToggling2FA = false);
+      showModal(context, "Error al actualizar la verificación en dos pasos. Inténtalo de nuevo.");
+    }
   }
 
   // Funcion para abrir la modal de edicion de foto de perfil
@@ -64,7 +102,7 @@ class _ProfileState extends State<Profile> {
           
           if (!context.mounted) return;
           // Si no hay ningun error, se actualiza la foto de perfil
-          showModal(context, "Imagen de perfil actualizada correctamente", title: "Éxito", isError: false, backPage: true);
+          showModal(context, "Imagen de perfil actualizada correctamente", title: "Éxito", type: AlertType.success, backPage: true);
           
         } 
         catch (e) { // En caso de que haya algun error, se muestra un mensaje de error
@@ -160,6 +198,24 @@ class _ProfileState extends State<Profile> {
                           onTap: () => ProfileEmailFlow.start(context, user, _refreshUI),
                         ),
 
+                        // Cambiar contraseña
+                        ListTile(
+                          title: const Text("Cambiar contraseña"),
+                          trailing: const Icon(Icons.edit),
+                          onTap: () => ProfileDialogs.showChangePasswordDialog(context),
+                        ),
+
+                        const Divider(height: 30),
+
+                        // Verificacion en dos pasos
+                        SwitchListTile(
+                          title: const Text("Verificación en dos pasos"),
+                          subtitle: Text(user.has2FA == true ? "Activada" : "Desactivada"),
+                          value: user.has2FA ?? false,
+                          activeThumbColor: AppButtonStyles.primaryColor,
+                          onChanged: _isToggling2FA ? null : (value) => _toggle2FA(value),
+                        ),
+
                         const Divider(height: 30),
 
                         // Rol del usuario
@@ -204,16 +260,11 @@ class _ProfileState extends State<Profile> {
                   width: double.infinity, 
                   height: 50,
                   child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade600,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 2,
+                    style: AppButtonStyles.danger.copyWith(
+                      minimumSize: const WidgetStatePropertyAll(Size(double.infinity, 50)),
                     ),
-                    icon: const Icon(Icons.exit_to_app, color: Colors.white),
-                    label: const Text(
-                      "Cerrar Sesión", 
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
-                    ),
+                    icon: const Icon(Icons.exit_to_app),
+                    label: const Text("Cerrar Sesión"),
                     onPressed: () => _handleLogout(context),
                   ),
                 ),

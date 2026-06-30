@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:blablaucm/models/travel_model.dart';
 import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/screens/travel_details.dart';
+import 'package:blablaucm/screens/travel_navigation_screen.dart';
 import 'package:blablaucm/services/api_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/screens/helper.dart';
 import 'package:blablaucm/providers/storage_provider.dart';
+import 'package:blablaucm/theme/app_colors.dart';
+import 'package:blablaucm/models/pair.dart';
 
 // Pantalla para mostar los detalles de un viaje creado por el usuario
 class CreatedTravelsDetailsScreen extends StatefulWidget {
@@ -28,6 +31,12 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
 
   bool _isLoading = true;
 
+  // Coordenadas del origen y destino del viaje
+  double? _originLat;
+  double? _originLng;
+  double? _destLat;
+  double? _destLng;
+
   @override
   void initState() {
     super.initState();
@@ -47,6 +56,12 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
       if (!mounted) return;
 
       // Guarda los datos en las variables de la clase
+      // Se cargan las coordenadas del origen y destino del viaje
+      _originLat = extraData.originLat;
+      _originLng = extraData.originLng;
+      _destLat = extraData.destLat;
+      _destLng = extraData.destLng;
+
       setState(() {
         widget.travel.driver.addRatings(extraData.rawRatings);
         widget.travel.driver.numRatings = extraData.numRatings;
@@ -107,24 +122,22 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
   Widget build(BuildContext context) {
     // Si el viaje esta en estado activo, se puede editar
     final bool canEdit = widget.travel.status == TravelStatus.active && widget.travel.startDate.isAfter(DateTime.now());
-    // Si el viaje esta en estado activo, se puede iniciar
-    final bool showStartButton = widget.canManagePassengers && widget.travel.status == TravelStatus.active;
+    final bool isActive = widget.travel.status == TravelStatus.active;
+    final bool isStarted = widget.travel.status == TravelStatus.started;
+    // Si el viaje esta en estado activo o iniciado, se puede iniciar o continuar
+    final bool showStartButton = widget.canManagePassengers && (isActive || isStarted);
+    final String startButtonLabel = isStarted ? "Continuar viaje" : "Iniciar Viaje";
 
+    final colors = AppColors.of(context);
     return Scaffold(
-      backgroundColor: const Color(0xFFF3F4F6),
+      backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        scrolledUnderElevation: 1,
-        shadowColor: Colors.black.withValues(alpha: 0.1),
-        iconTheme: const IconThemeData(color: Color(0xFF4B5563)),
         title: const Text(
           "Datos del viaje",
         ),
         centerTitle: false,
       ),
-      body: _isLoading? const Center(child: CircularProgressIndicator(color: Color(0xFF4F46E5)))
+      body: _isLoading? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : Column(
               children: [
                 Expanded(
@@ -136,6 +149,7 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
                     onRemovePassenger: widget.canManagePassengers
                         ? _removePassengerFromTravel
                         : null,
+                    onEdited: () => Navigator.pop(context, true),
                   ),
                 ),
               ],
@@ -144,9 +158,9 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
           ? Container(
               padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.95),
+                color: colors.card.withValues(alpha: 0.95),
                 border: Border(
-                  top: BorderSide(color: Colors.grey.shade200),
+                  top: BorderSide(color: colors.border),
                 ),
                 boxShadow: [
                   BoxShadow(
@@ -165,16 +179,16 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
                       width: double.infinity,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF10B981),
+                          backgroundColor: AppColors.success,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                           elevation: 0,
                         ),
-                        onPressed: () => _startTravel(context),
-                        child: const Text(
-                          "Iniciar Viaje",
+                        onPressed: isStarted ? () => _continueTravel(context) : () => _startTravel(context),
+                        child: Text(
+                          startButtonLabel,
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,
@@ -188,24 +202,9 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFEF2F2), // Red-50
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: const BorderSide(color: Color(0xFFFEE2E2)), // Red-100
-                        ),
-                        elevation: 0,
-                      ),
+                      style: AppButtonStyles.danger,
                       onPressed: () => _deleteTravel(context),
-                      child: const Text(
-                        "Eliminar Viaje",
-                        style: TextStyle(
-                          color: Color(0xFFEF4444), // Danger Red
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: const Text("Eliminar Viaje"),
                     ),
                   ),
                 ],
@@ -215,31 +214,37 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
     );
   }
 
-  // Funcion para llamar a la api para cambiar el estado
-  Future<bool> _requestStartTravel(String travelId) async {
+  // Funcion para llamar a la api para cambiar el estado del viaje a 'started'
+  Future<Pair<bool, ErrorCode>> _requestStartTravel(String travelId) async {
     // Se saca el endpoint
     final endpoint = "${dotenv.env['TRAVELS_ENDPOINT'] ?? '/travel/'}$travelId/";
-    // LLamada a la api
+    // LLamada a la api para cambiar el estado a 'started'
     final response = await api.requestToApi(
       endpoint,
       op: ApiOptions.patch,
       body: {
-        "state": TravelStatus.fnd.name // En un futuro, se deberia de cambiar a started y que abra Google Maps...
+        "state": TravelStatus.started.name // Se cambia el estado a 'started' para indicar que el viaje esta en curso
       },
     );
     // Se comprueba que la api ha repsondido correctamente, si no se devuelve false
-    if (response != null && response["status"] == "ok") return true;
+    if (response != null && response['error_code'] == null && response["state"] == TravelStatus.started.name) return Pair(first:true, second: ErrorCode.unknownError);
    
-    return false;
+    return Pair(first:false, second: ErrorCode.fromCode(response?['error_code'] ?? -1));
   }
 
-  // Funcion de iniciar un viaje
+  // Funcion de iniciar un viaje, cambia el estado y muestra la pantalla de navegacion
   void _startTravel(BuildContext context) async {
+    // Se comprueba que se tengan las coordenadas del viaje
+    if (_originLat == null || _originLng == null || _destLat == null || _destLng == null) {
+      showModal(context, "No se pudieron obtener las coordenadas del viaje. Inténtalo de nuevo.");
+      return;
+    }
+
     // Se muestra la modal de confirmacion
     final confirm = await showConfirmationModal(
       context,
       title: "Iniciar viaje",
-      message: "¿Quieres iniciar este viaje ahora?",
+      message: "¿Quieres iniciar este viaje ahora? Se abrirá la pantalla de navegación.",
       confirmText: "Iniciar",
       cancelText: "Cancelar",
       barrierDismissible: false,
@@ -248,28 +253,77 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
     // Si no le ha dado a aceptar, se sale
     if (!confirm) return;
 
-    // LLama a la funcion de la api para iniciar el viaje
+    // LLama a la funcion de la api para cambiar el estado a 'started'
     final success = await _requestStartTravel(widget.travel.id);
 
     if (!context.mounted) return;
 
-    // Si la api respondio correctamnete, success es verdadero, si no falso
-    if (success) { // Todo fue bien
+    // Si la api respondio correctamente, se navega a la pantalla de navegacion
+    if (success.first) {
       setState(() {
         widget.travel.status = TravelStatus.started;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Viaje iniciado"),
-          backgroundColor: Colors.green,
-        ),
-      );
+
+      // Se navega a la pantalla de navegacion con el mapa
+      await _openNavigationScreen();
     } 
-    else { // Hubo algun problema, por lo que se muestar el error en un modal
-      showModal(
-        context,
-        "No se ha podido iniciar el viaje. Inténtalo de nuevo.",
-      );
+    else { // Hubo algun problema, por lo que se muestra el error en un modal
+      // No se puede iniciar un viaje si ya hay otro iniciado
+      if(success.second == ErrorCode.travelAlreadyStarted){
+        showModal(
+          context,
+          "Ya tienes un viaje iniciado, finaliza el viaje antes de iniciar otro.",
+        );
+      }
+      else{ // Hubo otro error
+        showModal(
+          context,
+          "No se ha podido iniciar el viaje. Inténtalo de nuevo.",
+        );
+      }
+    }
+  }
+
+  // Si el viaje ya estaba iniciado, se debe continuar
+  void _continueTravel(BuildContext context) async {
+    if (_originLat == null || _originLng == null || _destLat == null || _destLng == null) {
+      showModal(context, "No se pudieron obtener las coordenadas del viaje. Inténtalo de nuevo.");
+      return;
+    }
+
+    final confirm = await showConfirmationModal(
+      context,
+      title: "Continuar viaje",
+      message: "¿Quieres continuar este viaje ahora? Se abrirá la pantalla de navegación.",
+      confirmText: "Continuar",
+      cancelText: "Cancelar",
+      barrierDismissible: false,
+    );
+
+    if (!confirm) return;
+
+    await _openNavigationScreen();
+  }
+
+  // Abre la pantalla de navegacion, mostrando el mapa y la ruta del viaje
+  Future<void> _openNavigationScreen() async {
+    final finished = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TravelNavigationScreen(
+          travel: widget.travel,
+          originLat: _originLat!,
+          originLng: _originLng!,
+          destLat: _destLat!,
+          destLng: _destLng!,
+        ),
+      ),
+    );
+
+    if (finished == true && mounted) {
+      setState(() {
+        widget.travel.status = TravelStatus.fnd;
+      });
     }
   }
 
@@ -282,7 +336,7 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
     // Llamada a la api para eliminar el viaje
     final response = await api.requestToApi(url, op: ApiOptions.delete);
     // Se comprueba que la respuesta sea correcta, si no se ha podido eliminar, se devuelve false
-    if (response == null || response["status"] != "ok") {
+    if (response == null || response.containsKey("error") || response["status"] == "error") {
       return false;
     }
     return true;
@@ -312,8 +366,9 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
         context,
         "El viaje se ha eliminado correctamente.",
         title: "Éxito",
-        isError: false,
+        type: AlertType.success,
         backPage: true, 
+        returnValue: true // Para refrescar la pagina al volver y que desaparezca el viaje eliminado
       );
     } 
     else {
@@ -321,6 +376,7 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
       showModal(
         context,
         "No se ha podido eliminar el viaje. Inténtalo de nuevo.",
+        type: AlertType.error
       );
     }
   }

@@ -3,6 +3,7 @@ import 'package:blablaucm/models/user_model.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/services/api_service.dart';
 import 'package:blablaucm/screens/email_verification.dart';
+import 'package:blablaucm/screens/helper.dart';
 
 // Flujo para cambiar el email del perfil
 // Primero se pide el nuevo email y se pide confirmacion
@@ -16,7 +17,7 @@ class ProfileEmailFlow {
     _editEmail(context, user, onSuccess);
   }
 
-  // Se comprueba que el formato del email es correcto 
+  // Se comprueba que el formato del email es correcto
   static bool _isValidEmail(String email) {
     final regex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
     return regex.hasMatch(email);
@@ -33,7 +34,7 @@ class ProfileEmailFlow {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return AlertDialog(
-              title: const Text("Editar email"), // Campo para introducir el nuevo email
+              title: const Text("Editar email"),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -53,11 +54,11 @@ class ProfileEmailFlow {
                 ],
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancelar"),
-                ),
-                ElevatedButton(
+                dialogButton(context, isAccept: false, label: "Cancelar", onPressed: () => Navigator.pop(context)),
+                dialogButton(
+                  context,
+                  isAccept: true,
+                  label: "Continuar",
                   onPressed: () { // Al pulsar en continuar, se valida el email
                     final email = controller.text.trim();
                     if (!_isValidEmail(email)) {
@@ -67,7 +68,6 @@ class ProfileEmailFlow {
                     Navigator.pop(context);
                     _confirmEmailChange(context, user, email, onSuccess);
                   },
-                  child: const Text("Continuar"),
                 ),
               ],
             );
@@ -108,27 +108,25 @@ class ProfileEmailFlow {
                 ],
               ),
               actions: [
-                TextButton( // Si cancela el cambio, se cierra la modal
-                  onPressed: isChecking ? null : () => Navigator.pop(context),
-                  child: const Text("No"),
-                ),
-                ElevatedButton( // Si confirma la modal, se procede a iniciar la modificacion
-                  onPressed: isChecking
-                      ? null
-                      : () async {
-                          setStateDialog(() => isChecking = true);
-                          final exists = await _verifyExistingEmail(newEmail); // Se verifica si el email ya esta en uso
-                          if (!context.mounted) return;
-                          Navigator.pop(context);
+                dialogButton(context, isAccept: false, label: "No", onPressed: isChecking ? null : () => Navigator.pop(context)),
+                dialogButton(
+                  context,
+                  isAccept: true,
+                  label: "Sí",
+                  isLoading: isChecking,
+                  onPressed: () async {
+                    setStateDialog(() => isChecking = true);
+                    final exists = await _verifyExistingEmail(newEmail); // Se verifica si el email ya esta en uso
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
 
-                          if (exists) { // Si ya esta en uso, se muestra un mensaje de error
-                            _editEmail(context, user, onSuccess, initialError: "El email ya está en uso", initialEmail: newEmail);
-                          } 
-                          else { // Si no esta en uso, se pasa al widget para introducir el codigo de verificacion
-                            _showVerificationCodeDialog(context, user, newEmail, onSuccess);
-                          }
-                        },
-                  child: const Text("Sí"),
+                    if (exists) { // Si ya esta en uso, se muestra un mensaje de error
+                      _editEmail(context, user, onSuccess, initialError: "El email ya está en uso", initialEmail: newEmail);
+                    }
+                    else { // Si no esta en uso, se pasa al widget para introducir el codigo de verificacion
+                      _showVerificationCodeDialog(context, user, newEmail, onSuccess);
+                    }
+                  },
                 ),
               ],
             );
@@ -140,7 +138,7 @@ class ProfileEmailFlow {
 
   // Función para verificar si el email ya esta en uso, devuelve true unicamente si el backend devuelve que el email esta libre, en caso contrario se devuelve false
   static Future<bool> _verifyExistingEmail(String newEmail) async {
-    // Se contruye el endpoint
+    // Se construye el endpoint
     final endpoint = dotenv.env['VERIFY_EXIST_EMAIL_ENDPOINT'] ?? '/users/exist_email/';
     // Se hace la petición a la api
     final response = await api.requestToApi(endpoint, queryParams: {'email': newEmail});

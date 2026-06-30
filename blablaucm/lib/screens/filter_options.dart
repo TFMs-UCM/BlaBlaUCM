@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:blablaucm/models/enums.dart';
+import 'package:blablaucm/screens/env_sticker_widget.dart';
+import 'package:blablaucm/screens/helper.dart';
+import 'package:blablaucm/theme/app_colors.dart';
 
 // Pantalla para mostrar las filtros en la busqueda de viajes
 class FilterOptionsPage extends StatefulWidget {
@@ -44,8 +47,16 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
     });
   }
 
+  AppColors get _c => AppColors.of(context);
+  bool get isDark => _c.isDark;
+  Color get cardColor => _c.card;
+  Color get borderColor => _c.border;
+  Color get textColor => _c.textPrimary;
+  Color get textMuted => _c.textSecondary;
+  Color get errorColor => _c.danger;
+
   // Funcion para cargar los valores de los filtros
-  @override void initState() { 
+  @override void initState() {
     super.initState(); 
     selectedRole = widget.selectedRole ?? []; 
     radiusToOrigin = widget.radiusToOrigin; 
@@ -71,18 +82,16 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Filtros"),
-        actions: [ if (_hasActiveFilters) // Si tiene algun filtro activo, le da la opcion de eliminarlos
-          TextButton(
-            onPressed: clearFilters,
-            child: const Text( // Texto que al pulsar limpia los filtros
-              "Limpiar",
-              style: TextStyle(
-                color: Colors.blue,
-                fontSize: 16,
+        actions: [
+          if (_hasActiveFilters)  // Si tiene algun filtro activo, le da la opcion de eliminarlos
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: OutlinedButton.icon(
+                onPressed: clearFilters,
+                icon: const Icon(Icons.filter_alt_off, size: 16),
+                label: const Text("Limpiar"),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
         ],
       ),
       body: SingleChildScrollView(
@@ -101,26 +110,7 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     children: [
-                      ListTile( // Campo para añadir los usuarios restringidos
-                        title: const Text("Usuarios restringidos"),
-                        subtitle: Text( // muestra la cantidad de roles que se han denegado
-                          selectedRole!.isEmpty ? "Ninguno seleccionado" : "${selectedRole!.length} seleccionados",
-                        ),
-                        trailing: const Icon(Icons.arrow_drop_down),
-                        onTap: () => _openCheckBoxDialog<UsersType>(
-                          title: "Usuarios restringidos",
-                          allOptions: UsersType.values.where((role) => role != UsersType.all).toList(),
-                          currentSelection: selectedRole,
-                          getLabel: (role) => role.label, 
-                          onConfirm: (newSelection) {
-                            setState(() {
-                              selectedRole = newSelection;
-                            });
-                          },
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [ // Slider para establecer el radio de origen, por defecto infinito
@@ -194,12 +184,21 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                         initialValue: selectedEnvSticker,
                         decoration: const InputDecoration(
                           labelText: "Etiqueta medioambiental",
-                          prefixIcon: Icon(Icons.security),
+                          prefixIcon: Icon(Icons.eco),
                           border: OutlineInputBorder(),
                         ),
                         // Se abre un dropdown menu con las opciones disponibles para que elija una
-                        items: EnvSticker.values.map((envSticker){
-                            return DropdownMenuItem(value: envSticker, child: Text(envSticker.label),);
+                        items: EnvSticker.values.map((envSticker) {
+                            return DropdownMenuItem(
+                              value: envSticker,
+                              child: Row(
+                                children: [
+                                  EnvStickerBadge(sticker: envSticker == EnvSticker.all ? null : envSticker, showEmpty: true),
+                                  const SizedBox(width: 10),
+                                  Text(envSticker.label),
+                                ],
+                              ),
+                            );
                           }).toList(),
                         onChanged: (value) {
                           setState(() {
@@ -215,7 +214,7 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                         initialValue: selectedTravelType,
                         decoration: const InputDecoration(
                           labelText: "Tipo de viaje",
-                          prefixIcon: Icon(Icons.security),
+                          prefixIcon: Icon(Icons.repeat),
                           border: OutlineInputBorder(),
                         ),
                         // Dropdown con los distintos tipos
@@ -248,7 +247,56 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                             });
                           },
                         ),
-                      )
+                      ),
+
+                      // Campo para añadir los usuarios restringidos
+                      const SizedBox(height: 16),
+                      Text("USUARIOS RESTRINGIDOS", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textMuted, letterSpacing: 1.1)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          ...selectedRole!.map((type) => InputChip(
+                            backgroundColor: isDark ? errorColor.withValues(alpha: 0.1) : Colors.red.shade50,
+                            side: BorderSide(color: isDark ? errorColor.withValues(alpha: 0.3) : Colors.red.shade200),
+                            labelStyle: TextStyle(color: isDark ? errorColor : Colors.red.shade700, fontWeight: FontWeight.w500),
+                            label: Text(type.label),
+                            deleteIconColor: isDark ? errorColor.withValues(alpha: 0.8) : Colors.red.shade400,
+                            onDeleted: () => setState(() => selectedRole!.remove(type)),
+                          )),
+
+                          if (selectedRole!.length < UsersType.values.length - 1)
+                            PopupMenuButton<UsersType>(
+                              tooltip: "Añadir restricción",
+                              color: cardColor,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: borderColor)),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: cardColor,
+                                  border: Border.all(color: borderColor),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.add, size: 18, color: textMuted),
+                                    const SizedBox(width: 4),
+                                    Text("Añadir", style: TextStyle(color: textMuted, fontWeight: FontWeight.w500)),
+                                  ],
+                                ),
+                              ),
+                              itemBuilder: (context) {
+                                final available = UsersType.values.where((u) => u != UsersType.all && !selectedRole!.contains(u)).toList();
+                                if (available.isEmpty) return [PopupMenuItem(enabled: false, child: Text("No hay más roles", style: TextStyle(color: textMuted)))];
+                                return available.map((u) => PopupMenuItem(value: u, child: Text(u.label, style: TextStyle(color: textColor)))).toList();
+                              },
+                              onSelected: (val) => setState(() => selectedRole!.add(val)),
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -262,13 +310,8 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                     child: ElevatedButton(
                       onPressed: () {Navigator.pop(context);
                       },
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: const Text(
-                        "Cancelar",
-                        style: TextStyle(fontSize: 16),
-                      ),
+                      style: AppButtonStyles.secondary,
+                      child: const Text("Cancelar"),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -284,13 +327,8 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                         "selectedPreferences" : selectedPreferences,
                         });
                       },
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: const Text(
-                        "Aplicar filtros",
-                        style: TextStyle(fontSize: 16),
-                      ),
+                      style: AppButtonStyles.primary,
+                      child: const Text("Aplicar filtros"),
                     ),
                   ),
                 ],
@@ -338,17 +376,12 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                 ),
               ),
               actions: [ // Botones de aceptar y cancelar
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text("Cancelar"),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    onConfirm(tempSelected);
-                    Navigator.pop(context);
-                  },
-                  child: const Text("Aceptar"),
-                ),
+                dialogButton(context, isAccept: false, label: "Cancelar", onPressed: () => Navigator.pop(context)),
+                dialogButton(context, isAccept: true, label: "Aceptar", onPressed: () {
+                  onConfirm(tempSelected);
+                  Navigator.pop(context);
+                }),
+
               ],
             );
           },

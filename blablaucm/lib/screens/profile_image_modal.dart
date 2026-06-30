@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:blablaucm/models/picked_image.dart';
 import 'package:blablaucm/services/image_picker_service.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:blablaucm/screens/helper.dart';
 
 // Clase para gestionar la imagen de perfil del usuario, permitiendo que suba o elimine su foto
 
@@ -56,69 +57,89 @@ class ProfileImageModal {
 
                   const SizedBox(height: 20),
 
-                  ElevatedButton.icon( // Opcion para subir una imagen desde la camara
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text("Cámara"),
+                  SizedBox(
+                    width: 140,
+                    child: dialogButton(context, isAccept: true, icon: Icons.camera_alt, label: "Cámara",
                     onPressed: () async {
-                      final img = await picker.pickUpImage(ImageSource.camera); // Se obtiene la imagen de la camara
-                      if (img != null) {
-                        setState(() {
-                          selectedImage = img;
-                          isDeleted = false;
-                          changed = true;
-                        });
+                      try {
+                        final img = await picker.pickUpImage(ImageSource.camera);
+                        if (img != null) {
+                          setState(() {
+                            selectedImage = img;
+                            isDeleted = false;
+                            changed = true;
+                          });
+                        }
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(e.toString().replaceAll('Exception: ', '')),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
                       }
                     },
                   ),
+                  ),
 
-                  ElevatedButton.icon( // Opcion para subir una imagen desde la galeria
-                    icon: const Icon(Icons.photo),
-                    label: const Text("Galería"),
+                  const SizedBox(height: 8),
+
+                  SizedBox(
+                    width: 140,
+                    child: dialogButton(context, isAccept: true, icon: Icons.photo, label: "Galería",
                     onPressed: () async {
-                      final img = await picker.pickUpImage(ImageSource.gallery); // Se abre la galeria para obtener una imagen
-                      if (img != null) {
-                        setState(() {
-                          selectedImage = img;
-                          isDeleted = false;
-                          changed = true;
-                        });
+                      try {
+                        final img = await picker.pickUpImage(ImageSource.gallery);
+                        if (img != null) {
+                          setState(() {
+                            selectedImage = img;
+                            isDeleted = false;
+                            changed = true;
+                          });
+                        }
+                      } catch (e) {
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(e.toString().replaceAll('Exception: ', '')),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
                       }
                     },
                   ),
+                  ),
 
-                  TextButton.icon( // Boton para eliminar la foto que tiene
-                    icon: Icon(
-                      Icons.delete,
-                      color: hasImage ? Colors.red : Colors.grey, 
+                  const SizedBox(height: 12),
+
+                  SizedBox(
+                    width: 140,
+                    child: ElevatedButton.icon( // Boton para eliminar la foto que tiene
+                      style: AppButtonStyles.danger,
+                      icon: const Icon(Icons.delete),
+                      label: const Text("Eliminar"),
+                      onPressed: hasImage
+                          ? () {
+                              setState(() {
+                                selectedImage = null;
+                                isDeleted = true;
+                                changed = true;
+                              });
+                            }
+                          : null, // Si no hay foto, se desactiva el boton pasandole null (no se puede borrar si no hay)
                     ),
-                    label: Text(
-                      "Eliminar foto",
-                      style: TextStyle(color: hasImage ? Colors.red : Colors.grey),
-                    ),
-                    onPressed: hasImage
-                        ? () {
-                            setState(() {
-                              selectedImage = null;
-                              isDeleted = true;
-                              changed = true;
-                            });
-                          }
-                        : null, // Si no hay foto, se desactiva el boton pasandole null (no se puede borrar si no hay)
                   ),
 
                   const SizedBox(height: 20),
 
-                  Row( // Botones de cancelar y guardar los cambios
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text("Cancelar"),
-                      ),
-                      ElevatedButton(
-                        // Si la foto fue eliminada, se pasa null a la api para que la borre, sino se le pasa la nueva foto
-                        onPressed: changed ? () {onSave(isDeleted ? null : selectedImage);} : null,
-                        child: const Text("Guardar"),
+                      dialogButton(context, isAccept: false, label: "Cancelar", onPressed: () => Navigator.pop(context)),
+                      // Si la foto fue eliminada, se pasa null a la api para que la borre, sino se le pasa la nueva foto
+                      dialogButton(context, isAccept: true, label: "Guardar",
+                        onPressed: changed ? () { onSave(isDeleted ? null : selectedImage); } : null,
                       ),
                     ],
                   )

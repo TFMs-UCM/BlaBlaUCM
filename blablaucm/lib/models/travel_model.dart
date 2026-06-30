@@ -2,6 +2,7 @@ import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/models/pick_up_points_model.dart';
 import 'package:blablaucm/models/user_model.dart';
 import 'package:blablaucm/models/vehicle_model.dart';
+import 'package:blablaucm/models/pair.dart';
 // Clase que representa un viaje
 class TravelModel {
   
@@ -21,7 +22,7 @@ class TravelModel {
   VehicleModel vehicle; // vehiculo
   //ChatStatus chatStatus; // estado del chat del viaje (futura implementacion)
   List<UsersType>? deniedRoles; // Lista de tipos de usuario a los que se les deniega el acceso al viaje
-  List<String>? passengers; // Lista de usuarios que ya han sido aprobados en el viaje
+  List<Pair<String, String?>>? passengers; // Lista de usuarios que ya han sido aprobados en el viaje
   bool isRequested = false; // Indica si el viaje ha sido solicitado o no
 
   TravelModel({
@@ -68,8 +69,11 @@ class TravelModel {
       destination: json['destination'],
       //pickUpPoints: [PickUpPointModel.fromJson(json['pick_up_points'])],
       deniedRoles: json['denied_roles'],
-      endPeriodicDate: json['end_periodic_date'] != null ? DateTime.parse(json['end_periodic_date']).toLocal() : null,
-      passengers: json['passengers'] != null ? List<String>.from(json['passengers']) : null,
+      endPeriodicDate: json['end_periodic_date'] != null ? DateTime.parse("${json['end_periodic_date']}T00:00:00Z") : null,
+      passengers: json['passengers']?.map((p) => Pair<String, String?>(
+        first: p['username'] as String,
+        second: p['profile_picture'] as String?,
+      )).toList(),
       isRequested: json['is_requested'] ?? false,
     );
   }
@@ -86,9 +90,9 @@ class TravelModel {
   }
 
   // Funcion para añadir los pasajeros al viaje
-  void addPassengers(List<String>? passengersJson) {
+  void addPassengers(List<Pair<String, String?>>? passengersJson) {
     if (passengersJson != null){
-      passengers = List<String>.from(passengersJson);
+      passengers = List<Pair<String, String?>>.from(passengersJson);
     }
   }
 }

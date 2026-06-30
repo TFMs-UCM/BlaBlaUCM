@@ -50,6 +50,31 @@ class TravelViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
     queryset = Travel.objects.all()
     serializer_class = TravelSerializer
     permission_classes = [IsAuthenticated]
+    
+    # Se sobreescribe el metodo partial_update para evitar que se puedan comenzar dos viajes a la vez
+    def partial_update(self, request, *args, **kwargs):
+        travel = self.get_object()
+
+        logger.info(f"Request to update travel {travel.id_travel} by user {request.user.username}")
+
+        # Solo el creador del viaje puede editarlo
+        if travel.creation_user != request.user:
+            return Response({
+                "status": "error",
+                "message": "No tienes permiso para actualizar este viaje.",
+                "error_code": ErrorCodes.INSUFICIENT_CREDENTIALS
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        started_state = TravelStates.objects.get(code='started')
+
+        if Travel.objects.filter(creation_user=request.user, is_deleted=False, state=started_state).exclude(pk=travel.pk).count() >= 1:
+            return Response({
+                "status": "error",
+                "message": "No puedes iniciar un nuevo viaje mientras tengas otro en curso.",
+                "error_code": ErrorCodes.TRAVEL_ALREADY_STARTED
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        return super().partial_update(request, *args, **kwargs)
 
     # Se sobreescribe el metodo destroy para eliminar el viaje, las solicitudes asociadas y notificar a los usuarios afectados
     def destroy(self, request, *args, **kwargs):
@@ -70,7 +95,7 @@ class TravelViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
             }, status=status.HTTP_403_FORBIDDEN)
 
         # Se sacan las solicitudes del viaje
-        request_travels = travel.requested_travels.filter(is_deleted=False).exclude(state__code='rejected')
+        request_travels = travel.requested_travels.filter(is_deleted=False)
         try:
             with transaction.atomic():
                 if travel.state.code == 'active': # Solo se borran las solicitudes si el viaje esta activo, si ya ha pasado, no se borran
@@ -94,7 +119,7 @@ class TravelViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
                     logger.info(f"Sent {len(notificaciones)} notifications for the deleted travel {travel.id_travel}.")
 
                     logger.info(f"Soft-deleting requests associated with travel {travel.id_travel}.")
-                    request_travels.update(
+                    travel.requested_travels.filter(is_deleted=False).update(
                         is_deleted=True,
                         deleted_at=timezone.now()
                     )
@@ -1261,7 +1286,6 @@ class RequestTravelsViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
                 logger.error(f"Error: {str(e)}")
                 return Response({"status": "error", "message": str(e), "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # Si no nos envían 'status', dejamos que Django siga su flujo normal
         return super().partial_update(request, *args, **kwargs)
 
 # Endpoints para gestionar los puntos de recogida

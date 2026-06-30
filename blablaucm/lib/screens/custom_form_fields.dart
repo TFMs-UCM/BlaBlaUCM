@@ -121,7 +121,7 @@ Widget buildDropdownRow<T>({required String label, required T? currentValue, req
 }
 
 // Widget que muestra un campo de contraseña, con el texto oculto y un boton para hacerlo visible
-Widget passwordField(String label, TextEditingController controller, bool obscureText, VoidCallback onToggleVisibility, {String? errorText, String labelText = 'Contraseña'}) {
+Widget passwordField(String label, TextEditingController controller, bool obscureText, VoidCallback onToggleVisibility, {String? errorText, String labelText = 'Contraseña', int errorMaxLines = 1}) {
   return Padding(
     padding: const EdgeInsets.symmetric(vertical: 8),
     child: Column(
@@ -150,6 +150,7 @@ Widget passwordField(String label, TextEditingController controller, bool obscur
               onPressed: onToggleVisibility, // Al pulsar sobre el icono, se cambia la visibilidad
             ),
             errorText: errorText,
+            errorMaxLines: errorMaxLines,
           ),
         ),
       ],

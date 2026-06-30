@@ -5,8 +5,52 @@ import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/models/pick_up_points_model.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/services/api_service.dart';
+import 'package:blablaucm/theme/app_colors.dart';
 
 // En este archivo se engloban funciones que se utilizan en varias pantallas
+
+// Clase con los estilos de los botones
+class AppButtonStyles {
+  AppButtonStyles._();
+
+  static const Color primaryColor = AppColors.success;
+
+  // Boton principal 
+  static final ButtonStyle primary = ElevatedButton.styleFrom(
+    backgroundColor: primaryColor,
+    foregroundColor: Colors.white,
+    padding: const EdgeInsets.symmetric(vertical: 16),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    elevation: 0,
+    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+  );
+
+  // Boton secundario 
+  static final ButtonStyle secondary = ElevatedButton.styleFrom(
+    backgroundColor: AppColors.successSurface, // Green-50
+    foregroundColor: AppColors.successText, // Green-600
+    padding: const EdgeInsets.symmetric(vertical: 16),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+      side: const BorderSide(color: AppColors.successBorder), // Green-100
+    ),
+    elevation: 0,
+    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+  );
+
+  // Boton destructivo (para eliminar o cancelar algo)
+  static final ButtonStyle danger = ElevatedButton.styleFrom(
+    backgroundColor: AppColors.dangerSurface, // Red-50
+    foregroundColor: AppColors.light.danger, // Danger Red
+    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+      side: const BorderSide(color: AppColors.dangerBorder), 
+    ),
+    elevation: 0,
+    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+  );
+}
 
 // Funcion para abrir una modal que muestre las valoraciones
 Future<void> showRatingsDialog(BuildContext context, List<Pair<RatingsTypes,double>> ratings, {String? title, int? numRatings}) async {
@@ -109,58 +153,75 @@ Future<void> showRatingsDialog(BuildContext context, List<Pair<RatingsTypes,doub
   );
 }
 
+// Boton para los dialogs
+Widget dialogButton(BuildContext context, {required bool isAccept, required String label, VoidCallback? onPressed, bool isLoading = false, Color color = AppColors.success, IconData? icon}) {
+  if (!isAccept) {
+    return TextButton(
+      onPressed: onPressed,
+      child: Text(label, style: TextStyle(color: AppColors.of(context).textSecondary)),
+    );
+  }
+  final style = ElevatedButton.styleFrom(
+    backgroundColor: color,
+    foregroundColor: Colors.white,
+    elevation: 0,
+    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+  );
+  if (isLoading) {
+    return ElevatedButton(
+      style: style,
+      onPressed: null,
+      child: const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+    );
+  }
+  if (icon != null) {
+    return ElevatedButton.icon(
+      style: style,
+      onPressed: onPressed,
+      icon: Icon(icon),
+      label: Text(label),
+    );
+  }
+  return ElevatedButton(
+    style: style,
+    onPressed: onPressed,
+    child: Text(label),
+  );
+}
+
 // Modal generica para pedir confirmacion al usuario
 // Permite modificar el texto que se muestra, los colores y nombres de los botones
 Future<bool> showConfirmationModal(BuildContext context, {required String title, required String message, String confirmText = "Aceptar", 
-    String cancelText = "Cancelar", Color confirmColor = const Color(0xFF4F46E5), bool barrierDismissible = true}) async {
+    String cancelText = "Cancelar", Color confirmColor = AppColors.primary, bool barrierDismissible = true}) async {
   // Devuelve true solo si se pulsa el boton aceptar (aunque se le puede cambiar el nombre si se le pasa otro en confirmText)
   final result = await showDialog<bool>(
     context: context,
     barrierDismissible: barrierDismissible,
     builder: (dialogContext) {
+      final colors = AppColors.of(dialogContext);
       return AlertDialog(
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
         title: Text(
           title, // Se muestra el titulo que se desea
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.bold,
-            color: Color(0xFF111827),
+            color: colors.textPrimary,
           ),
         ),
         content: Text(
           message,
-          style: const TextStyle(
-            color: Color(0xFF374151),
+          style: TextStyle(
+            color: colors.textSecondary,
             fontSize: 15,
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(
-              cancelText, // En el boton de cancelar se asigna el texto que se desea para dicho boton
-              style: const TextStyle(color: Color(0xFF6B7280)), // Gris para cancelar (no cambia este color)
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: confirmColor, // En el boton de confirmar, se permite poner el color que se desee
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            onPressed: () => Navigator.pop(dialogContext, true), // Solo se devulve true si se pulsa este boton
-            child: Text(
-              confirmText, // Texto que aparece en el boton de aceptar
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          dialogButton(dialogContext, isAccept: false, label: cancelText, onPressed: () => Navigator.pop(dialogContext, false)),
+          dialogButton(dialogContext, isAccept: true, label: confirmText, onPressed: () => Navigator.pop(dialogContext, true), color: confirmColor),
         ],
       );
     },
@@ -562,10 +623,15 @@ class TravelExtraData {
   final int numRatings;
   final List<DriverPreferences> preferences;
   final List<PickUpPointModel> pickUpPoints;
-  final List<String> passengers;
+  final List<Pair<String, String?>> passengers;
   final bool isRequested;
   final List<FutureTravelExtraData>? futureTravels; // Viajes futuros asociados
   final List<UsersType> deniedRoles;
+  // Coordenadas del origen y destino del viaje
+  final double? originLat;
+  final double? originLng;
+  final double? destLat;
+  final double? destLng;
 
   TravelExtraData({
     required this.rawRatings,
@@ -575,6 +641,10 @@ class TravelExtraData {
     required this.passengers,
     required this.isRequested,
     required this.deniedRoles,
+    this.originLat,
+    this.originLng,
+    this.destLat,
+    this.destLng,
     List<FutureTravelExtraData>? futureTravels,
   }) : futureTravels = futureTravels ?? [];
 }
@@ -604,6 +674,7 @@ Future<TravelExtraData> fetchTravelExtraData({required String travelId, required
   List<DriverPreferences> preferences = [];
   Map<String, dynamic> rawRatings = {};
   List<FutureTravelExtraData>? futureTravels = [];
+  List<Pair<String, String?>> passengersData = [];
 
   if (response != null && response['error'] == null) { // Si no hay errores, se cargan los datos
     // Parseo de valoraciones
@@ -628,10 +699,14 @@ Future<TravelExtraData> fetchTravelExtraData({required String travelId, required
             ?.map((point) => PickUpPointModel.fromJson(point))
             .toList() ?? [];
 
-    // Parseo de pasajeros
-    final passengers = (response['passengers'] as List<dynamic>?)
-            ?.map((passenger) => passenger.toString())
-            .toList() ?? [];
+    // Parseo de los datos de los pasajeros (nombre y foto de perfil)
+    final passengersDataRaw = response['passengers'] as List<dynamic>?;
+
+    passengersData = passengersDataRaw
+        ?.map((p) => Pair<String, String?>(
+              first: p['username'] as String,
+              second: p['profile_picture'] as String?,
+            )).toList()?? [];
 
     // Parseo de si el usuario ha solicitado plaza en el viaje
     final isRequested = response['is_requested'] ?? false;
@@ -666,16 +741,26 @@ Future<TravelExtraData> fetchTravelExtraData({required String travelId, required
             .whereType<UsersType>()
             .toList() ?? [];
 
+    // Parseo de coordenadas del origen y destino
+    final double? originLat = (response['origin_lat'] as num?)?.toDouble();
+    final double? originLng = (response['origin_lng'] as num?)?.toDouble();
+    final double? destLat = (response['destination_lat'] as num?)?.toDouble();
+    final double? destLng = (response['destination_lng'] as num?)?.toDouble();
+
     // Se devuelven los datos
     return TravelExtraData(
       rawRatings: rawRatings,
       numRatings: numRatings,
       preferences: preferences,
       pickUpPoints: pickUpPoints,
-      passengers: passengers,
+      passengers: passengersData,
       isRequested: isRequested,
       futureTravels: futureTravels,
       deniedRoles: usersDenied,
+      originLat: originLat,
+      originLng: originLng,
+      destLat: destLat,
+      destLng: destLng
     );
   } 
   else {
@@ -685,157 +770,71 @@ Future<TravelExtraData> fetchTravelExtraData({required String travelId, required
 }
 
 // Funcion para mostrar una ventana modal para mostrar un mensaje, permite distinguir si es error o no, eso cambia el color del texto y el icono
-void showModal(BuildContext context, String message, {String title = "Error", bool isError = true, bool backPage = false, bool? returnValue, bool barrierDismissible = true}) {
+void showModal(BuildContext context, String message, {String title = "Error", AlertType type = AlertType.error, bool backPage = false, bool? returnValue, bool barrierDismissible = true, VoidCallback? onAccepted}) {
   showDialog(
     context: context,
     barrierDismissible: barrierDismissible, // Para evitar cerrar la modal al pulsar fuera, por defecto se puede
-    builder: (dialogContext) => AlertDialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      title: Row(
-        children: [
-          Icon( // Si hay error, se muestra un icono y si es correcto otro
-            isError ? Icons.error_outline : Icons.check_circle_outline,
-            color: isError ? const Color(0xFFEF4444) : const Color(0xFF10B981),
-            size: 24,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                color: isError ? const Color(0xFFEF4444) : const Color(0xFF10B981),
-                fontWeight: FontWeight.bold,
+    builder: (dialogContext) {
+      final colors = AppColors.of(dialogContext);
+      // Color de acento segun el tipo de alerta (icono, titulo y boton)
+      final Color accent = type == AlertType.error ? colors.danger :
+                           type == AlertType.success ? AppColors.success :
+                           type == AlertType.warning ? AppColors.warning :
+                           AppColors.info;
+      return AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: [
+            Icon( // Si hay error, se muestra un icono y si es correcto otro
+              type == AlertType.error ? Icons.error_outline :
+              type == AlertType.success ? Icons.check_circle_outline :
+              type == AlertType.warning ? Icons.warning_amber_outlined :
+              Icons.info_outline,
+              color: accent,
+              size: 24,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  color: accent,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
+          ],
+        ),
+        content: Text(
+          message, // Se añade el texto que se desea
+          style: TextStyle(
+            color: colors.textSecondary,
+            fontSize: 15,
+          ),
+        ),
+        actions: [
+          dialogButton(
+            dialogContext,
+            isAccept: true,
+            label: "Aceptar",
+            color: accent,
+            onPressed: () {
+              Navigator.pop(dialogContext); // Cierra el modal
+              if (onAccepted != null) { // Si se especifica una funcion, se ejecuta al aceptar, se usa para regresar al inicio 
+                // o a alguna pantalla especifica
+                onAccepted();
+              } 
+              else if (backPage) { // Si se especifica, se vuelve a la pantalla anterior, si no solo cierra la modal
+                Navigator.pop(context, returnValue);
+              }
+            },
           ),
         ],
-      ),
-      content: Text(
-        message, // Se añade el texto que se desea
-        style: const TextStyle(
-          color: Color(0xFF374151), // textGray700
-          fontSize: 15,
-        ),
-      ),
-      actions: [
-        ElevatedButton(
-          style: ElevatedButton.styleFrom( // Si es error, el boton es rojo, si no, verde
-            backgroundColor: isError ? const Color(0xFFEF4444) : const Color(0xFF10B981),
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-          onPressed: () {
-            Navigator.pop(dialogContext); // Cierra el modal
-            if (backPage) { // Si se especifica, se vuelve a la pantalla anterior, si no solo cierra la modal
-              Navigator.pop(context, returnValue); 
-            }
-          },
-          child: const Text(
-            "Aceptar", // Solo esta este boton, que cierra la modal
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
-    ),
+      );
+    },
   );
 }
 
-// Clase para englobar los temas de la aplicacion
-class AppTheme {
-  // Colores principales
-  static const Color primaryColor = Color(0xFF4F46E5); 
-  static const Color primaryColorDark = Color(0xFF4338CA);
-  static const Color successColor = Color(0xFF10B981); 
-  static const Color warningColor = Color(0xFFF59E0B);
-
-  // Determinar si es modo oscuro o no
-  static bool isDark(BuildContext context) => Theme.of(context).brightness == Brightness.dark;
-
-  // Cambiar el color dependiendo del modo
-  static Color bgColor(BuildContext context) => isDark(context) ? const Color(0xFF0F172A) : const Color(0xFFF3F4F6);
-  static Color cardColor(BuildContext context) => isDark(context) ? const Color(0xFF1E293B) : Colors.white;
-  static Color surfaceLow(BuildContext context) => isDark(context) ? const Color(0xFF334155) : const Color(0xFFF9FAFB);
-  static Color borderColor(BuildContext context) => isDark(context) ? const Color(0xFF475569) : const Color(0xFFE5E7EB);
-  static Color textColor(BuildContext context) => isDark(context) ? const Color(0xFFF8FAFC) : const Color(0xFF111827);
-  static Color textMuted(BuildContext context) => isDark(context) ? const Color(0xFF94A3B8) : const Color(0xFF6B7280);
-  static Color errorColor(BuildContext context) => isDark(context) ? const Color(0xFFF87171) : const Color(0xFFEF4444);
-
-  // Widget para construir un card unificado
-  static Widget buildCard(BuildContext context, {required Widget child, EdgeInsetsGeometry? padding}) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: cardColor(context),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor(context), width: 1),
-        boxShadow: isDark(context) ? [] : [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 2))
-        ],
-      ),
-      padding: padding ?? const EdgeInsets.all(20),
-      child: child,
-    );
-  }
-
-  // Widget para crear un imput decorator
-  static InputDecoration customInputDecoration(BuildContext context, String label, {bool hasError = false, String? errorText, IconData? prefixIcon, Color? iconColor}) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: TextStyle(color: textMuted(context), fontSize: 13, fontWeight: FontWeight.w500),
-      filled: true,
-      fillColor: surfaceLow(context),
-      prefixIcon: prefixIcon != null ? Icon(prefixIcon, color: iconColor ?? primaryColor) : null,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: borderColor(context))),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: primaryColor)),
-      errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: errorColor(context))),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      errorText: hasError ? errorText : null,
-    );
-  }
-
-  // Widget para crear un footer
-  static Widget buildStickyFooter(BuildContext context, {required List<Widget> children}) {
-    return Container(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).padding.bottom + 16),
-      decoration: BoxDecoration(
-        color: cardColor(context).withValues(alpha: 0.95),
-        border: Border(top: BorderSide(color: borderColor(context))),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 6, offset: const Offset(0, -4))
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: children,
-      ),
-    );
-  }
-
-  // Widget para construir un boton
-  static Widget buildPrimaryButton({required VoidCallback? onPressed, required String text, bool isLoading = false, Color? color}) {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color ?? primaryColor,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 0,
-        ),
-        onPressed: isLoading ? null : onPressed,
-        child: isLoading
-            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-            : Text(text, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
-      ),
-    );
-  }
-}
 
