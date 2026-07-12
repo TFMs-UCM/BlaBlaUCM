@@ -85,7 +85,7 @@ class _VehicleDetailsProfileScreenState extends State<VehicleDetailsProfileScree
     final bool confirmed = await showConfirmationModal(
       context,
       title: "Eliminar vehículo",
-      message: "¿Seguro que quieres eliminar el vehículo:\n\n${widget.vehicle.vehiclePreview()}?",
+      message: "¿Seguro que quieres eliminar el vehículo:\n\n${widget.vehicle.vehiclePreview}?",
       confirmText: "Eliminar",
       cancelText: "Cancelar",
       confirmColor: Colors.red, 
@@ -101,7 +101,7 @@ class _VehicleDetailsProfileScreenState extends State<VehicleDetailsProfileScree
     
     try {
       // Se crea el endpoint
-      final endpoint = "${dotenv.env['VEHICLES_ENDPOINT'] ?? '/vehicles/'}${widget.vehicle.id}";
+      final endpoint = "${dotenv.env['VEHICLES_ENDPOINT'] ?? '/vehicles/'}${widget.vehicle.id}/";
       // Se realiza la peticion a la api
       final response = await api.requestToApi(endpoint, op: ApiOptions.delete);
 
@@ -113,7 +113,7 @@ class _VehicleDetailsProfileScreenState extends State<VehicleDetailsProfileScree
         }
         else{ // Si se elimina correctamente, se muestra una modal de exito
           widget.onDelete(widget.vehicle);
-          showModal(context, "Vehículo eliminado correctamente", title: "Éxito", isError: false, backPage: true);
+          showModal(context, "Vehículo eliminado correctamente", title: "Éxito", type: AlertType.success, backPage: true);
         }
       }
       else{ // Si la api no responde nada, se muestra un error de conexion
@@ -237,7 +237,7 @@ class _VehicleDetailsProfileScreenState extends State<VehicleDetailsProfileScree
               isSaving = false;
             });
             // Se muestra una modal de exito
-            showConfirmationModal(context, title: "Exito", message: "Vehículo actualizado correctamente");
+            showModal(context, "Vehículo actualizado correctamente",title: "Exito", type: AlertType.success, barrierDismissible: false, backPage: true);
         }
       }
       else{ // Si la api no responde, se muestra un error de conexion
@@ -267,9 +267,9 @@ class _VehicleDetailsProfileScreenState extends State<VehicleDetailsProfileScree
           Expanded(
             child: ElevatedButton( // Solo se peude eliminar si no esta cargando
               onPressed: isSaving ? null : _confirmDelete,
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              style: AppButtonStyles.danger,
               child: isSaving  // Si esta cargando, se muestra un spinner de carga, si no el boton de eliminar
-                 ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white))
+                 ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Color(0xFFEF4444)))
                  : const Text("Eliminar"),
             ),
           ),
@@ -279,6 +279,7 @@ class _VehicleDetailsProfileScreenState extends State<VehicleDetailsProfileScree
               onPressed: isSaving ? null : () { // Solo se puede editar si no esta cargando
                 setState(() => editMode = true);
               },
+              style: AppButtonStyles.primary,
               child: const Text("Editar"),
             ),
           ),
@@ -291,10 +292,7 @@ class _VehicleDetailsProfileScreenState extends State<VehicleDetailsProfileScree
         Expanded(
           child: ElevatedButton(
             onPressed: isSaving ? null : _cancelEdit,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.grey.shade300,
-              foregroundColor: Colors.black,
-            ),
+            style: AppButtonStyles.secondary,
             child: const Text("Cancelar"),
           ),
         ),
@@ -302,7 +300,8 @@ class _VehicleDetailsProfileScreenState extends State<VehicleDetailsProfileScree
         Expanded(
           child: ElevatedButton(
             onPressed: isSaving ? null : _confirmSave,
-            child: isSaving 
+            style: AppButtonStyles.primary,
+            child: isSaving
                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white))
                  : const Text("Guardar"),
           ),

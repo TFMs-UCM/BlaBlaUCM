@@ -11,6 +11,15 @@ class VehicleModel {
   CarColor? color; // Color del vehiculo
   String? userId; // id del usuario
 
+  // Getter para obtener el numero maximo de pasajeros (asientos totales - 1)
+  int get maxPassengers => numSeats - 1;
+
+  // Getter para la previsualizacion del vehiculo
+  String get vehiclePreview => "$brand $model";
+
+  // Getter para la previsualizacion del vehiculo con la matricula
+  String get vehiclePreviewWithPlate => "$brand $model - $plate";
+
   VehicleModel({
     required this.id,
     required this.model,
@@ -22,10 +31,7 @@ class VehicleModel {
     this.color
   });
 
-  // Funcion para la previsualizacion del vehiculo
-  String vehiclePreview (){
-    return "$plate - $brand - $model";
-  }
+
   // Constructor vacio
   static VehicleModel empty(){
     return VehicleModel(id: "", model: "", brand: "", plate: "", envSticker: EnvSticker.all, numSeats: 0); 

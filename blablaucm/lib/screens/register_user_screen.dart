@@ -69,7 +69,7 @@ class _RegisterUserScreenState extends State<RegisterUserScreen> {
           context,
           'Tu cuenta ha sido creada correctamente.',
           title: 'Éxito',
-          isError: false,
+          type: AlertType.success,
           backPage: true,
         );
       },
@@ -327,10 +327,7 @@ class _RegisterUserScreenState extends State<RegisterUserScreen> {
                               Expanded( // Boton de cancelar, que cierra la pantalla
                                 child: ElevatedButton(
                                   onPressed: () => Navigator.pop(context),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.grey[200],
-                                    foregroundColor: Colors.black87,
-                                  ),
+                                  style: AppButtonStyles.secondary,
                                   child: const Text("Cancelar"),
                                 ),
                               ),
@@ -338,6 +335,7 @@ class _RegisterUserScreenState extends State<RegisterUserScreen> {
                               Expanded( // Boton de crear, para crear la cuenta del usuario
                                 child: ElevatedButton(
                                   onPressed: _createAccount,
+                                  style: AppButtonStyles.primary,
                                   child: const Text("Crear"),
                                 ),
                               ),

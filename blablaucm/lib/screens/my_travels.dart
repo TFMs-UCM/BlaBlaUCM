@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:blablaucm/screens/created_travels.dart';
 import 'package:blablaucm/screens/requested_travels.dart';
+import 'package:blablaucm/screens/helper.dart';
 
 // Pantalla para consultar los viajes del usuario
 
@@ -11,7 +12,7 @@ class MyTravelsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Mis viajes")),
+      //appBar: AppBar(title: const Text("Mis viajes")),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -40,10 +41,9 @@ class MyTravelsScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
+                    style: AppButtonStyles.primary.copyWith(
+                      padding: const WidgetStatePropertyAll(
+                        EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                       ),
                     ),
                     child: const Text("Creados"),
@@ -60,10 +60,9 @@ class MyTravelsScreen extends StatelessWidget {
                         ),
                       );
                     },
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 32,
-                        vertical: 16,
+                    style: AppButtonStyles.secondary.copyWith(
+                      padding: const WidgetStatePropertyAll(
+                        EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                       ),
                     ),
                     child: const Text("Solicitados"),

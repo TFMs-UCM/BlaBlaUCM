@@ -6,11 +6,15 @@ import 'package:blablaucm/models/travel_model.dart';
 import 'package:blablaucm/models/vehicle_model.dart';
 import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/services/api_service.dart';
-import 'package:blablaucm/services/google_places_service.dart';
+import 'package:blablaucm/services/route_services/location_service.dart';
+import 'package:blablaucm/services/route_services/osm_service.dart';
 import 'package:blablaucm/providers/storage_provider.dart';
 import 'package:blablaucm/screens/created_vehicle_details.dart';
 import 'package:blablaucm/screens/helper.dart';
+import 'package:blablaucm/screens/vehicle_picker_modal.dart';
 import 'package:blablaucm/services/vehicles_service.dart';
+import 'package:blablaucm/screens/env_sticker_widget.dart';
+import 'package:blablaucm/theme/app_colors.dart';
 
 // Pantalla para editar los datos de un viaje
 
@@ -33,27 +37,25 @@ class TravelEditScreen extends StatefulWidget {
 class _TravelEditScreenState extends State<TravelEditScreen> {
   final ApiService api = ApiService();
   final SecureStorageService storage = SecureStorageService();
-  final GooglePlacesService placesService = GooglePlacesService();
+  final LocationService placesService = OsmService();
   
   bool isSaving = false;
   bool showError = false;
+  String? _pendingVehicleWarning;
 
-  // Colores que se usan en la pantalla
-  // final Color appPrimaryColor = const Color(0xFF10B981); 
-  final Color appPrimaryColor = Colors.blue; 
+  AppColors get _c => AppColors.of(context);
 
-  // Para adaptarla a modo oscuro o claro
-  bool get isDark => Theme.of(context).brightness == Brightness.dark;
+  bool get isDark => _c.isDark;
 
-  Color get primaryColor => appPrimaryColor;
-  Color get bgColor => isDark ? const Color(0xFF0F172A) : const Color(0xFFF9F9FF);
-  Color get cardColor => isDark ? const Color(0xFF1E293B) : Colors.white;
-  Color get surfaceContainerLow => isDark ? const Color(0xFF334155) : const Color(0xFFF1F3FF);
-  Color get borderColor => isDark ? const Color(0xFF475569) : const Color(0xFFE2E8F0);
-  Color get textColor => isDark ? const Color(0xFFF8FAFC) : const Color(0xFF141B2B);
-  Color get textMuted => isDark ? const Color(0xFF94A3B8) : const Color(0xFF6C7A71);
-  Color get errorColor => isDark ? const Color(0xFFF87171) : Colors.red.shade600;
-  Color get titleColor => isDark ? const Color(0xFFF8FAFC) : const Color(0xFF141B2B);
+  Color get primaryColor => AppColors.primary;
+  Color get bgColor => _c.background;
+  Color get cardColor => _c.card;
+  Color get surfaceContainerLow => _c.surfaceLow;
+  Color get borderColor => _c.border;
+  Color get textColor => _c.textPrimary;
+  Color get textMuted => _c.textSecondary;
+  Color get errorColor => _c.danger;
+  Color get titleColor => _c.textPrimary;
 
   // Origen
   late TextEditingController originCtrl;
@@ -82,6 +84,7 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
   late TravelType selectedTravelType;
   late TextEditingController periodicDaysCtrl;
   DateTime? endPeriodicDate;
+  bool onlyThisTravel = true;
   List<UsersType> restrictedUserTypes = [];
   DateTime? periodicRemoveDate;
 
@@ -95,7 +98,7 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
     originCtrl = TextEditingController(text: widget.travel.origin);
     destinationCtrl = TextEditingController(text: widget.travel.destination);
     
-    currentSeats = widget.travel.remainingSeats > 0 ? widget.travel.remainingSeats : 1;
+    currentSeats = widget.travel.numSeats;
     durationCtrl = TextEditingController(text: widget.travel.duration.toString());
     selectedDate = widget.travel.startDate;
     selectedTime = TimeOfDay(hour: selectedDate.hour, minute: selectedDate.minute);
@@ -107,6 +110,7 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
     periodicDaysCtrl = TextEditingController(text: widget.travel.periodicInterval?.toString() ?? "");
     endPeriodicDate = widget.travel.endPeriodicDate;
     restrictedUserTypes = widget.travel.deniedRoles ?? [];
+    onlyThisTravel = true; // Por defecto se deja que sea solo para ese viaje
     periodicRemoveDate = null;
     hasPassengers = widget.numPassengers > 0;
   }
@@ -160,102 +164,6 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
     if (onModalUpdate != null) onModalUpdate();
   }
 
-  // Modal para ver cambiar el vehiculo del viaje, se muestran todos los vehiculos del usuario y segun ba bajando, se van cargando los siguientes
-  void _openVehicleModal(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Dialog(
-          backgroundColor: cardColor,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: Container(
-            width: double.maxFinite,
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text("Selecciona un vehículo", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
-                const SizedBox(height: 16),
-                
-                if (isLoadingVehicles) CircularProgressIndicator(color: primaryColor) // Si no tiene vehiculos, se muestra un mensje informando al usuario
-                else if (userVehicles.isEmpty) Text("No tienes vehículos registrados.", style: TextStyle(color: textColor))
-                else Flexible(
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
-                    child: NotificationListener<ScrollNotification>(
-                      onNotification: (ScrollNotification scrollInfo) {
-                        if (scrollInfo is ScrollUpdateNotification && !isLoadingMoreVehicles && nextVehiclesUrl != null && scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 50) {
-                          // Si ha hecho scroll y se pueden cargar mas vehiculos, se cargan
-                          _loadMoreVehicles(onModalUpdate: () => setModalState(() {}));
-                        }
-                        return false;
-                      },
-                      child: ListView.builder( // Se muestran los datos del vehiculo
-                        shrinkWrap: true, 
-                        itemCount: userVehicles.length + (isLoadingMoreVehicles ? 1 : 0),
-                        itemBuilder: (context, index) {
-                          if (index == userVehicles.length){ 
-                            return Padding(padding: const EdgeInsets.all(16.0), child: Center(child: CircularProgressIndicator(color: primaryColor)));
-                          }
-                          final v = userVehicles[index]; // Se saca el vehiculo elegido
-                          return ListTile(
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(color: surfaceContainerLow, borderRadius: BorderRadius.circular(8)),
-                              child: Icon(Icons.directions_car, color: primaryColor),
-                            ),
-                            // Se muestra la informacion del vehiculo seleccionado
-                            title: Text(v.vehiclePreview(), style: TextStyle(color: textColor)), 
-                            subtitle: Text("${v.numSeats} asientos - Etiqueta: ${v.envSticker?.label ?? 'N/A'}", style: TextStyle(color: textMuted)),
-                            trailing: vehicle.id == v.id ? Icon(Icons.check_circle, color: primaryColor) : null,
-                            onTap: () { 
-                              setState(() {
-                                vehicle = v;
-                                if (currentSeats > v.numSeats - 1){ 
-                                  currentSeats = v.numSeats - 1; // No puede ser mayor el numero que las plazas del vehiculo
-                                }
-                                int minSeats = hasPassengers ? widget.numPassengers : 1;
-                                if (currentSeats < minSeats){
-                                  currentSeats = minSeats; // Si hay pasajeros, al menos debe haber plazas para ellos
-                                }
-                              });
-                              Navigator.pop(context); 
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-                
-                const SizedBox(height: 16),
-                ElevatedButton.icon( // Se añade el boton para crear un nuevo vehiculo
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColor, 
-                    foregroundColor: Colors.white, 
-                    minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
-                  ),
-                  onPressed: () {
-                    Navigator.pop(context); // Al pulsar redirige al usuario a la pantalla de crear vehiculo
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => CreatedVehicleDetailsScreen(
-                      onSave: (newVehicle) => setState(() {
-                        userVehicles.insert(0, newVehicle);
-                        vehicle = newVehicle;
-                      })
-                    )));
-                  },
-                  icon: const Icon(Icons.add), 
-                  label: const Text("Crear nuevo vehículo"),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   // Funcion para confirmar los cambios y guardar las modificaciones del viaje
   Future<void> _confirmSave() async {
     setState(() => showError = false);
@@ -290,7 +198,7 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
     }
 
     // Se comprueba que el vehiculo tenga suficientes plazas para los pasajeros
-    if(vehicle.numSeats - 1 < widget.numPassengers) {
+    if(vehicle.maxPassengers < widget.numPassengers) {
       setState(() => showError = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("El vehículo seleccionado debe tener capacidad al menos para los pasajeros que ya tienen reserva, en este caso, ${widget.numPassengers} pasajeros."), backgroundColor: errorColor),
@@ -300,7 +208,7 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
 
     // Se comprueba que el numero de plazas publicas sea correcto
     int minSeats = widget.travel.isPeriodic ? widget.travel.numSeats : (hasPassengers ? widget.numPassengers : 1);
-    if (currentSeats < minSeats || currentSeats > vehicle.numSeats - 1) {
+    if (currentSeats < minSeats || currentSeats > vehicle.maxPassengers) {
       setState(() => showError = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: const Text("El número de plazas seleccionadas no es válido."), backgroundColor: errorColor),
@@ -319,11 +227,17 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
         return;
       }
       // Se comprueba que el viaje tenga una fecha de fin de periodicidad posterior a la fecha de inicio
-      if (endPeriodicDate!.isBefore(selectedDate)) {
+      final endUtc = endPeriodicDate!.toUtc();
+      final startUtc = selectedDate.toUtc();
+      
+      // Se sacan solo el año, mes y día
+      final pureEndDate = DateTime.utc(endUtc.year, endUtc.month, endUtc.day);
+      final pureStartDate = DateTime.utc(startUtc.year, startUtc.month, startUtc.day);
+
+      // Se comparan las fechas sin la hora
+      if (pureEndDate.isBefore(pureStartDate)) {
         setState(() => showError = true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: const Text("La fecha de fin no puede ser anterior a la fecha del viaje."), backgroundColor: errorColor),
-        );
+        showModal(context, "La fecha de fin no puede ser anterior a la fecha del viaje.");
         return;
       }
     }
@@ -334,7 +248,9 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
       title: "Confirmar cambios",
       message: !widget.travel.isPeriodic
           ? "¿Deseas guardar las modificaciones realizadas en este viaje?"
-          : "¿Deseas guardar las modificaciones realizadas en este viaje? \nTen en cuenta que SE MODIFICARAN TODOS LOS VIAJES FUTUROS al ser este un viaje periódico, si no lo desea, cambie primero el viaje a periodico y luego modifíquelo.",
+          : onlyThisTravel
+              ? "¿Deseas guardar las modificaciones realizadas en este viaje?"
+              : "¿Deseas guardar las modificaciones realizadas en este viaje? \nTen en cuenta que SE MODIFICARAN TODOS LOS VIAJES FUTUROS al ser este un viaje periódico, si no lo desea, cambie primero el viaje a puntual y luego modifíquelo.",
       confirmText: "Guardar",
       cancelText: "Cancelar",
       confirmColor: primaryColor
@@ -372,6 +288,7 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
         "end_periodic_date": endPeriodicDate != null ? endPeriodicDate!.toUtc().toIso8601String().split('T')[0] : null,
         "periodic_remove_date": periodicRemoveDate != null ? periodicRemoveDate!.toUtc().toIso8601String().split('T')[0] : null,
         "users_deny": restrictedUserTypes.map((u) => u.name).toList(),
+        "only_this_travel": onlyThisTravel,
       };
 
       // Se realiza la peticion a la api
@@ -392,23 +309,14 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
 
         widget.onUpdate(updatedTravel);
         
-        await showDialog( // Si se ha modificado correctamente, se muestra una modal informando al usuario
-          context: context,
+        showModal(
+          context,
+          "Viaje actualizado correctamente.",
+          title: "Éxito",
+          type: AlertType.success,
+          backPage: true,
+          returnValue: true, 
           barrierDismissible: false,
-          builder: (_) => AlertDialog(
-            backgroundColor: cardColor,
-            title: const Text("Éxito", style: TextStyle(color: Colors.green)),
-            content: Text("Viaje actualizado correctamente.", style: TextStyle(color: textColor)),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context); 
-                  Navigator.pop(context); 
-                },
-                child: Text("Aceptar", style: TextStyle(color: primaryColor)),
-              ),
-            ],
-          ),
         );
       } 
       else { // Si no se ha podido, se muestra un mensaje de error indicandole el motivo
@@ -487,28 +395,22 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
                   _buildSettingsCard(), // Card con los datos de periodicidad y restricciones
                   const SizedBox(height: 32),
                   ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: primaryColor, foregroundColor: Colors.white,
-                      minimumSize: const Size(double.infinity, 54),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 2,
-                    ), 
+                    style: AppButtonStyles.primary.copyWith(
+                      minimumSize: const WidgetStatePropertyAll(Size(double.infinity, 54)),
+                    ),
                     onPressed: isSaving ? null : _confirmSave, // Si se da a guardar mientras se carga, no se hace nada, si no, se guardan los cambios
                     icon: isSaving ? const SizedBox.shrink() : const Icon(Icons.save),
-                    label: isSaving 
+                    label: isSaving
                         ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Text("Guardar cambios", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        : const Text("Guardar cambios"),
                   ),
                   const SizedBox(height: 12),
-                  TextButton( // Boton para poder cancelar la edicion
-                    style: TextButton.styleFrom(
-                      foregroundColor: errorColor,
-                      minimumSize: const Size(double.infinity, 54),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      backgroundColor: isDark ? errorColor.withValues(alpha:0.1) : Colors.red.shade50,
+                  ElevatedButton( // Boton para poder cancelar la edicion
+                    style: AppButtonStyles.danger.copyWith(
+                      minimumSize: const WidgetStatePropertyAll(Size(double.infinity, 54)),
                     ),
                     onPressed: () => Navigator.pop(context),
-                    child: const Text("Cancelar", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    child: const Text("Cancelar"),
                   ),
                   const SizedBox(height: 40),
                 ],
@@ -592,7 +494,7 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
                               return;
                             }
                             originCtrl.text = suggestion['description'];
-                            final coords = await placesService.getPlaceDetails(suggestion['place_id']);
+                            final coords = await placesService.getPlaceDetails(suggestion);
                             if (coords != null){ 
                               setState(() { originLat = coords['lat']; originLng = coords['lng']; });
                             }
@@ -617,7 +519,7 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
                               return;
                             }
                             destinationCtrl.text = suggestion['description'];
-                            final coords = await placesService.getPlaceDetails(suggestion['place_id']);
+                            final coords = await placesService.getPlaceDetails(suggestion);
                             if (coords != null){
                               setState(() { destLat = coords['lat']; destLng = coords['lng']; });
                             }
@@ -638,12 +540,12 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
   // Widget para construir el card de horario y plazas, con los campos de fecha, hora y numero de plazas
   Widget _buildScheduleAndSeatsGrid() {
     // Se calcula el maximo y minimo numero de plazas 
-    int maxSeats = vehicle.numSeats - 1; // Como maximo son las plazas del vehiculo menos la plaza del conductor
-    // Si es periodico, no se pueden reducir las plazas, solo se pueden aumentar, en caso de que sea puntual, si tiene pasajeros no puede ser menor que el numero de ellos
+    int maxSeats =  widget.travel.isPeriodic ?widget.travel.numSeats : vehicle.maxPassengers; // Como maximo son las plazas del vehiculo menos la plaza del conductor
+    // Si es periodico, no se pueden modificar las plazas, en caso de que sea puntual, si tiene pasajeros no puede ser menor que el numero de ellos
     int minSeats = widget.travel.isPeriodic ? widget.travel.numSeats : (hasPassengers ? widget.numPassengers : 1);
 
-    bool canAddSeats = currentSeats < maxSeats; // Se pueden añadir sitios si los actuales son menores que el maximo
-    bool canRemoveSeats = currentSeats > minSeats; // Se pueden quitar sitios si los actuales son mayores que el minimo
+    bool canAddSeats = widget.travel.isPeriodic ? false : currentSeats < maxSeats; // Se pueden añadir sitios si los actuales son menores que el maximo
+    bool canRemoveSeats = widget.travel.isPeriodic ? false : currentSeats > minSeats; // Se pueden quitar sitios si los actuales son mayores que el minimo
 
     return Column(
       children: [
@@ -815,7 +717,7 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
                   children: [ // Se muestra un mensaje indicando que no se pueden reducir las plazas en un viaje periodico
                     Icon(Icons.info_outline, color: Colors.amber.shade700, size: 20),
                     const SizedBox(width: 8),
-                    Expanded(child: Text("Al ser un viaje periódico, no se puede reducir el número de plazas originalmente publicadas, solo aumentarlo, si desea reducirlo transformelo antes en puntual.", style: TextStyle(fontSize: 12, color: Colors.amber.shade800))),
+                    Expanded(child: Text("El número de plazas no se puede modificar en un viaje periodico.", style: TextStyle(fontSize: 12, color: Colors.amber.shade800))),
                   ],
                 ),
               ),
@@ -827,38 +729,47 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
                 decoration: BoxDecoration(
                   color: surfaceContainerLow, 
                   borderRadius: BorderRadius.circular(12),
-                  border: (showError && (currentSeats < minSeats || currentSeats > vehicle.numSeats - 1)) ? Border.all(color: errorColor, width: 1.5) : null,
+                  border: (showError && (currentSeats < minSeats || currentSeats > vehicle.maxPassengers)) ? Border.all(color: errorColor, width: 1.5) : null,
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [ // Se muestran dos botoens, uno para sumar y otro para restar el numero de plazas
-                    IconButton(
-                      style: IconButton.styleFrom(
-                        backgroundColor: cardColor, 
-                        elevation: isDark || !canRemoveSeats ? 0 : 1, 
-                        side: isDark && canRemoveSeats ? BorderSide(color: borderColor) : BorderSide.none
-                      ),
-                      icon: Icon(Icons.remove, color: canRemoveSeats ? textColor : textMuted.withValues(alpha: 0.4)),
-                      onPressed: !canRemoveSeats ? null : () { // Si no se pueden quitar plazas, el boton no hace nada
-                        setState(() => currentSeats--);
-                      },
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 48,
+                      child: canRemoveSeats
+                          ? IconButton(
+                              style: IconButton.styleFrom(
+                                backgroundColor: cardColor,
+                                elevation: isDark ? 0 : 1,
+                                side: isDark ? BorderSide(color: borderColor) : BorderSide.none,
+                              ),
+                              icon: Icon(Icons.remove, color: textColor),
+                              onPressed: () => setState(() => currentSeats--),
+                            )
+                          : null,
                     ),
-                    Text(currentSeats.toString(), style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: textColor)),
-                    IconButton(
-                      style: IconButton.styleFrom(
-                        backgroundColor: canAddSeats ? primaryColor : Colors.grey.shade400, 
-                        elevation: isDark || !canAddSeats ? 0 : 2
-                      ),
-                      icon: const Icon(Icons.add, color: Colors.white),
-                      onPressed: !canAddSeats ? null : () { // Si no se pueden añadir plazas, el boton no hace nada
-                        setState(() => currentSeats++);
-                      },
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(currentSeats.toString(), style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: textColor)),
+                    ),
+                    SizedBox(
+                      width: 48,
+                      child: canAddSeats
+                          ? IconButton(
+                              style: IconButton.styleFrom(
+                                backgroundColor: primaryColor,
+                                elevation: isDark ? 0 : 2,
+                              ),
+                              icon: const Icon(Icons.add, color: Colors.white),
+                              onPressed: () => setState(() => currentSeats++),
+                            )
+                          : null,
                     ),
                   ],
                 ),
               ),
               // Si el numero de plazas es inválido, se muestra un mensaje indicandolo
-              if (showError && (currentSeats < minSeats || currentSeats > vehicle.numSeats - 1)) ...[
+              if (showError && (currentSeats < minSeats || currentSeats > vehicle.maxPassengers)) ...[
                 const SizedBox(height: 4),
                 Center(
                   child: Text("Número de plazas inválido", style: TextStyle(fontSize: 12, color: errorColor, fontWeight: FontWeight.bold)),
@@ -894,8 +805,48 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
                   Text("Vehículo", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: textColor)),
                 ],
               ),
-              TextButton( // Boton para llamar a la funcion de cambiar el vehiculo 
-                onPressed: () => _openVehicleModal(context),
+              TextButton( // Boton para llamar a la funcion de cambiar el vehiculo
+                onPressed: () => showVehiclePickerModal(
+                  context,
+                  selectedVehicle: vehicle,
+                  vehicles: userVehicles,
+                  isLoadingVehicles: isLoadingVehicles,
+                  isLoadingMoreVehicles: isLoadingMoreVehicles,
+                  nextVehiclesUrl: nextVehiclesUrl,
+                  onSelectVehicle: (v) => setState(() {
+                    vehicle = v;
+                    if (currentSeats > v.maxPassengers) currentSeats = v.maxPassengers;
+                    final minSeats = hasPassengers ? widget.numPassengers : 1;
+                    if (currentSeats < minSeats) currentSeats = minSeats;
+                  }),
+                  onLoadMore: _loadMoreVehicles,
+                  onCreateNewVehicle: () {
+                    Navigator.push<void>(context, MaterialPageRoute(
+                      builder: (_) => CreatedVehicleDetailsScreen(
+                        onSave: (newVehicle) {
+                          setState(() {
+                            userVehicles.insert(0, newVehicle);
+                            if (newVehicle.maxPassengers >= currentSeats) {
+                              vehicle = newVehicle;
+                            } 
+                            else {
+                              _pendingVehicleWarning =
+                                "El vehículo creado tiene ${newVehicle.maxPassengers} plaza${newVehicle.maxPassengers > 1 ? 's' : ''} para pasajeros, "
+                                "pero el viaje necesita al menos $currentSeats. No se puede asignar.";
+                            }
+                          });
+                        },
+                      ),
+                    )).then((_) {
+                      if (mounted && _pendingVehicleWarning != null) {
+                        final msg = _pendingVehicleWarning!;
+                        _pendingVehicleWarning = null;
+                        showModal(context, msg, title: "Vehículo no asignable", type: AlertType.warning);
+                      }
+                    });
+                  },
+                  minRequiredPassengers: widget.travel.numSeats,
+                ),
                 child: Text("Cambiar", style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold)),
               )
             ],
@@ -903,28 +854,60 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: surfaceContainerLow, borderRadius: BorderRadius.circular(12), border: showError && vehicle.numSeats - 1 < widget.numPassengers ? Border.all(color: errorColor) : null),
-            child: Row(
+            decoration: BoxDecoration(color: surfaceContainerLow, borderRadius: BorderRadius.circular(12), border: showError && vehicle.maxPassengers < widget.numPassengers ? Border.all(color: errorColor) : null),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 50, height: 50,
-                  decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(8)),
-                  child: Icon(Icons.directions_car, color: textMuted, size: 30),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 50, height: 50,
+                      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(8)),
+                      child: Icon(Icons.directions_car, color: textMuted, size: 30),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildVehicleInfoRow("Marca", vehicle.brand),
+                          _buildVehicleInfoRow("Modelo", vehicle.model),
+                          _buildVehicleInfoRow("Matrícula", vehicle.plate),
+                          _buildVehicleInfoRow("Color", vehicle.color?.label ?? "—"),
+                          _buildVehicleInfoRow("Asientos", "${vehicle.numSeats}"),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        EnvStickerBadge(sticker: vehicle.envSticker, size: 50, showEmpty: true),
+                        if (showError && vehicle.maxPassengers < widget.numPassengers) ...[
+                          const SizedBox(height: 6),
+                          Icon(Icons.error, color: errorColor),
+                        ],
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [ // Se muestran los datos del vehiculo
-                      Text("Capacidad total: ${vehicle.numSeats} asientos", style: TextStyle(fontSize: 13, color: textMuted)),
-                    ],
-                  ),
-                ),
-                // Si hay error, se muestra el icono de error
-                if (showError && vehicle.numSeats - 1 < widget.numPassengers) Icon(Icons.error, color: errorColor),
               ],
             ),
           )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVehicleInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 90, child: Text("$label:", style: TextStyle(fontSize: 14, color: textMuted, fontWeight: FontWeight.w500))),
+          Expanded(child: Text(value, style: TextStyle(fontSize: 14, color: textColor))),
         ],
       ),
     );
@@ -966,129 +949,148 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
               selected: {selectedTravelType},
               onSelectionChanged: (Set<TravelType> newSelection) {
                 setState(() => selectedTravelType = newSelection.first);
+                setState(() => onlyThisTravel = true); // Si se cambia el tipo de viaje, se resetea la opcion de aplicar cambios a todos los viajes futuros
               },
             ),
           ),
-          const SizedBox(height: 24),
-          
+          const SizedBox(height: 20),
+
           // Si el tipo es periodico, se muestran los campos de configuracion de periodicidad
           if (selectedTravelType == TravelType.periodic) ...[
-            TextField( // Intervalo de repeticion
-              controller: periodicDaysCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              style: TextStyle(color: textColor),
-              decoration: _customInputDecoration(
-                "PERIODO (1-31 DÍAS)",
-              ).copyWith(
-                labelStyle: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: textMuted,
-                  letterSpacing: 1.1,
+            if(widget.travel.isPeriodic)...[ // Solo afecta a los que ya son periodicos
+              Text("APLICAR CAMBIOS A", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textMuted, letterSpacing: 1.1)),
+              const SizedBox(height: 8),
+              
+              SizedBox( // Selector del tipo de viaje
+                width: double.infinity,
+                child: SegmentedButton<bool>(
+                  style: SegmentedButton.styleFrom(
+                    selectedBackgroundColor: primaryColor,
+                    selectedForegroundColor: Colors.white,
+                    backgroundColor: surfaceContainerLow,
+                    foregroundColor: textColor,
+                    side: BorderSide(color: borderColor),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  segments: const [ // Se permite elegir el viaje, o bien puntual o bien periodico
+                    ButtonSegment(value: true, label: Text('Este viaje')),
+                    ButtonSegment(value: false, label: Text('Todos los viajes futuros')),
+                  ],
+                  selected: {onlyThisTravel},
+                  onSelectionChanged: (Set<bool> newSelection) {
+                    setState(() => onlyThisTravel = newSelection.first);
+                    if(!onlyThisTravel){
+                      showModal(context, title: "AVISO", type: AlertType.warning, "Se aplicarán los cambios a todos los viajes futuros, incluyendo los que ya tienen reservas.", barrierDismissible: false);
+                    }
+                  },
                 ),
-                errorText: showError &&
-                        (int.tryParse(periodicDaysCtrl.text) == null ||
-                        int.parse(periodicDaysCtrl.text) < 1 ||
-                        int.parse(periodicDaysCtrl.text) > 31)
-                    ? "Obligatorio (1-31)" : null,
               ),
-            ),
-
-            const SizedBox(height: 16),
-            Text("FECHA FIN DE PERIODICIDAD", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: (showError && endPeriodicDate == null) ? errorColor : textMuted, letterSpacing: 1.1)),
-            const SizedBox(height: 8),
-            Row( // Fecha de fin de periodicidad
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context, 
-                        initialDate: endPeriodicDate ?? selectedDate.add(const Duration(days: 1)), 
-                        firstDate: selectedDate, 
-                        lastDate: DateTime(2100), 
-                        locale: const Locale('es', 'ES'),
-                        confirmText: "Aceptar",
-                        cancelText: "Cancelar"
-                      );
-                      if (picked != null) setState(() => endPeriodicDate = picked);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      decoration: BoxDecoration(color: surfaceContainerLow, borderRadius: BorderRadius.circular(10), border: (showError && endPeriodicDate == null) ? Border.all(color: errorColor) : null),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            endPeriodicDate == null ? "Obligatorio" : "${endPeriodicDate!.day.toString().padLeft(2, '0')}/${endPeriodicDate!.month.toString().padLeft(2, '0')}/${endPeriodicDate!.year}", 
-                            style: TextStyle(fontSize: 16, color: (showError && endPeriodicDate == null) ? errorColor : textColor)
-                          ),
-                          Icon(Icons.event, color: (showError && endPeriodicDate == null) ? errorColor : textMuted),
-                        ],
+            ],
+            if (!widget.travel.isPeriodic)...[ // Si el viaje ya era periodico, no se puede cambiar el intervalo ni la fecha de fin
+              
+              TextField( // Intervalo de repeticion
+                controller: periodicDaysCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: TextStyle(color: textColor),
+                decoration: _customInputDecoration(
+                  "PERIODO (1-31 DÍAS)",
+                ).copyWith(
+                  labelStyle: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: textMuted,
+                    letterSpacing: 1.1,
+                  ),
+                  errorText: showError &&
+                          (int.tryParse(periodicDaysCtrl.text) == null ||
+                          int.parse(periodicDaysCtrl.text) < 1 ||
+                          int.parse(periodicDaysCtrl.text) > 31)
+                      ? "Obligatorio (1-31)" : null,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text("FECHA FIN DE PERIODICIDAD", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: (showError && endPeriodicDate == null) ? errorColor : textMuted, letterSpacing: 1.1)),
+              const SizedBox(height: 8),
+              Row( // Fecha de fin de periodicidad
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context, 
+                          initialDate: endPeriodicDate ?? selectedDate.add(const Duration(days: 1)), 
+                          firstDate: selectedDate, 
+                          lastDate: DateTime(2100), 
+                          locale: const Locale('es', 'ES'),
+                          confirmText: "Aceptar",
+                          cancelText: "Cancelar"
+                        );
+                        if (picked != null) setState(() => endPeriodicDate = picked);
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(color: surfaceContainerLow, borderRadius: BorderRadius.circular(10), border: (showError && endPeriodicDate == null) ? Border.all(color: errorColor) : null),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              endPeriodicDate == null ? "Obligatorio" : "${endPeriodicDate!.day.toString().padLeft(2, '0')}/${endPeriodicDate!.month.toString().padLeft(2, '0')}/${endPeriodicDate!.year}", 
+                              style: TextStyle(fontSize: 16, color: (showError && endPeriodicDate == null) ? errorColor : textColor)
+                            ),
+                            Icon(Icons.event, color: (showError && endPeriodicDate == null) ? errorColor : textMuted),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                if (endPeriodicDate != null) ...[ // Boton para limpiar la fecha de fin de periodicidad
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(Icons.close, color: textMuted),
-                    tooltip: "Quitar fecha",
-                    onPressed: () => setState(() => endPeriodicDate = null),
-                  ),
+                  if (endPeriodicDate != null) ...[ // Boton para limpiar la fecha de fin de periodicidad
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: Icon(Icons.close, color: textMuted),
+                      tooltip: "Quitar fecha",
+                      onPressed: () => setState(() => endPeriodicDate = null),
+                    ),
+                  ],
                 ],
-              ],
-            ),
+              ),
+            ],
+            const SizedBox(height: 20),
           ],
           if (selectedTravelType == TravelType.punctual && widget.travel.isPeriodic)...[ // Era periodico y se selecciona puntual
-            Text("BORRAR VIAJES PERIÓDICOS DESDE", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textMuted, letterSpacing: 1.1)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context, 
-                        initialDate: periodicRemoveDate ?? selectedDate.add(const Duration(days: 1)), 
-                        firstDate: selectedDate, 
-                        lastDate: DateTime(2100), 
-                        locale: const Locale('es', 'ES'),
-                        confirmText: "Aceptar",
-                        cancelText: "Cancelar"
-                      );
-                      if (picked != null) setState(() => periodicRemoveDate = picked);
-                    },
-                    child: Container( // Si se pasa a periodico, se le da la opcion de eliminar los viajes periodicos a partir de una fecha concreta
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      decoration: BoxDecoration(color: surfaceContainerLow, borderRadius: BorderRadius.circular(10)),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(periodicRemoveDate == null ? "Opcional" : "${periodicRemoveDate!.day.toString().padLeft(2, '0')}/${periodicRemoveDate!.month.toString().padLeft(2, '0')}/${periodicRemoveDate!.year}", style: TextStyle(fontSize: 16, color: periodicRemoveDate == null ? textMuted : textColor)),
-                          Icon(Icons.event, color: textMuted),
-                        ],
-                      ),
-                    ),
+              Text("APLICAR CAMBIOS A", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textMuted, letterSpacing: 1.1)),
+              const SizedBox(height: 8),
+              
+              SizedBox( // Selector del tipo de viaje
+                width: double.infinity,
+                child: SegmentedButton<bool>(
+                  style: SegmentedButton.styleFrom(
+                    selectedBackgroundColor: primaryColor,
+                    selectedForegroundColor: Colors.white,
+                    backgroundColor: surfaceContainerLow,
+                    foregroundColor: textColor,
+                    side: BorderSide(color: borderColor),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
+                  segments: const [ // Se permite elegir el viaje, o bien puntual o bien periodico
+                    ButtonSegment(value: true, label: Text('Este viaje')),
+                    ButtonSegment(value: false, label: Text('Todos los viajes futuros')),
+                  ],
+                  selected: {onlyThisTravel},
+                  onSelectionChanged: (Set<bool> newSelection) {
+                    setState(() => onlyThisTravel = newSelection.first);
+                    if(!onlyThisTravel){
+                      showModal(context, title: "AVISO", type: AlertType.warning, "Se aplicarán los cambios a todos los viajes futuros, incluyendo los que ya tienen reservas.", barrierDismissible: false);
+                    }
+                  },
                 ),
-                if (periodicRemoveDate != null) ...[ // Boton para limpiar la fecha de eliminacion de viajes periodicos
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(Icons.close, color: textMuted),
-                    tooltip: "Quitar fecha",
-                    onPressed: () => setState(() => periodicRemoveDate = null),
-                  ),
-                ],
-              ],
-            ),
+              ),
+            const SizedBox(height: 20),
           ],
-          
-          const SizedBox(height: 24),
+
           Divider(color: borderColor),
-          const SizedBox(height: 16),
-          
+          const SizedBox(height: 20),
+
           Text("RESTRICCIONES (ROLES DENEGADOS)", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textMuted, letterSpacing: 1.1)),
           const SizedBox(height: 8),
 
@@ -1122,8 +1124,8 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
                 onDeleted: widget.travel.isPeriodic ? null : () => setState(() => restrictedUserTypes.remove(type)),
               )),
               
-              // Si es periodico, se oculata el boton
-              if (!widget.travel.isPeriodic)
+              // Si es periodico, se oculata el boton, si estan todos los roles menos el all, se oculta el boton
+              if (!widget.travel.isPeriodic && restrictedUserTypes.length < UsersType.values.length - 1)
                 PopupMenuButton<UsersType>(
                 tooltip: "Añadir restricción",
                 color: cardColor,

@@ -3,7 +3,10 @@ import 'package:blablaucm/services/api_service.dart';
 import 'package:blablaucm/screens/home.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/screens/register_user_screen.dart';
+import 'package:blablaucm/screens/forgot_password_screen.dart';
 import 'package:blablaucm/screens/custom_form_fields.dart';
+import 'package:blablaucm/screens/email_verification.dart';
+import 'package:blablaucm/screens/helper.dart';
 
 // Pantalla de inicio de sesion de la aplicacion
 
@@ -63,6 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ElevatedButton( // Boton para iniciar sesion
                 onPressed: _isLoading ? null : () => _performLogin(),
+                style: AppButtonStyles.primary,
                 child: _isLoading
                     ? const SizedBox(
                         width: 20,
@@ -74,6 +78,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 onPressed: () {}, // TODO Implementar el login con google
+                style: AppButtonStyles.secondary,
                 icon: const Icon(Icons.login, color: Colors.red),
                 label: const Text('Entrar con Google'),
               ),
@@ -103,6 +108,25 @@ class _LoginScreenState extends State<LoginScreen> {
                 },
                 child: const Text(
                   'Crear una cuenta',
+                  style: TextStyle(
+                    color: Colors.blue,
+                    decoration: TextDecoration.underline,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 12),
+              GestureDetector( // Si se pulsa sobre el texto olvidé mi contraseña, se abre esa pantalla
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ForgotPasswordScreen(),
+                    ),
+                  );
+                },
+                child: const Text(
+                  'He olvidado mi contraseña',
                   style: TextStyle(
                     color: Colors.blue,
                     decoration: TextDecoration.underline,
@@ -152,14 +176,14 @@ class _LoginScreenState extends State<LoginScreen> {
           });
         } 
         else if (data['requires_2fa'] == true) { // El backend indica que necesita el 2FA para poder acceder
-          _show2FADialog(); // Se muestra la modal de 2FA
+          _show2FADialog(_emailController.text.trim(), _passwordController.text.trim()); // Se muestra la modal de 2FA
         } 
         else if (data['user'] != null) { // EL backend ha devuelto los datos del usuario, por lo que se entra en la app
           if (!mounted) return;
           Navigator.pushReplacement( // S epasa a la pantalla de inicio
             context,
             MaterialPageRoute(
-              builder: (_) => const HomePage(title: 'BlablaUCM'),
+              builder: (_) => const HomePage(),
             ),
           );
         }
@@ -185,165 +209,27 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // Funcion para mostrar la modal del 2FA
-  void _show2FADialog() {
-    List<TextEditingController> controllers = List.generate(6, (_) => TextEditingController());
-    List<FocusNode> focusNodes = List.generate(6, (_) => FocusNode()); // Se crean 6 focus nodes ya que hay 6 carcteres en el codigo que se usa
-    bool isLoadingDialog = false;
-    bool isSending = false;
-    String? errorText;
-
-    showDialog(
+  void _show2FADialog(String username, String password) {
+    EmailVerification.showVerificationDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setStateDialog) {
-            
-            // Funcion para reenviar el codigo
-            void resendCode() async {
-              setStateDialog(() {
-                isSending = true;
-                errorText = null;
-              });
-              for (var c in controllers) { c.clear(); } // Se ponen todas las casillas vacias
-              
-              // Se vuelve a llamar a la api para que genere un nuevo codigo
-              await _apiService.login(
-                _emailController.text.trim(),
-                _passwordController.text.trim(),
-              );
-              
-              if (!context.mounted) return;
-              setStateDialog(() => isSending = false);
-              // Se pone el foco en el primer campo
-              focusNodes[0].requestFocus();
-            }
-
-            // Cuando se rellena el ultimo cuadro, se llama a la api automaticamnete
-            void onCodeComplete() async {
-              final code = controllers.map((c) => c.text).join();
-              if (code.length != 6) return;
-              
-              setStateDialog(() { isLoadingDialog = true; errorText = null; });
-              
-              // Se llama a la api con el codigo introducido
-              final data = await _apiService.login(
-                _emailController.text.trim(),
-                _passwordController.text.trim(),
-                code: code,
-              );
-              
-              if (!context.mounted) return;
-              setStateDialog(() => isLoadingDialog = false);
-              
-              if (data != null) {
-                if (data['user'] != null) { // Si se reciben los datos del usuario, se ha verificado correctamente
-                  // Éxito total
-                  Navigator.of(context).pop();
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const HomePage(title: 'Flutter Demo Home Page'),
-                    ),
-                  );
-                } 
-                else if (data['error'] != null) {
-                  // Su hay un error, se muestra el mensaje y se borran los campos introducidos
-                  setStateDialog(() => errorText = data['error']['message'] ?? "Código incorrecto");
-                  for (var c in controllers) {c.clear();}
-                  focusNodes[0].requestFocus();
-                } 
-                else { // Si la api no devuelve ni error ni los datos
-                  setStateDialog(() => errorText = "Respuesta inesperada");
-                }
-              } 
-              else { // Si no devuelve nada, se muestra un error de conexion
-                setStateDialog(() => errorText = "Error de conexión");
-              }
-            }
-
-            return AlertDialog(
-              title: const Text("Verificación en 2 pasos"),
-              contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    isSending ? "Reenviando código..." : "Hemos enviado un código a tu cuenta.",
-                    textAlign: TextAlign.center,
-                  ),
-                  if (!isSending) ...[
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: isLoadingDialog ? null : resendCode,
-                      child: const Text(
-                        "Reenviar código",
-                        style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  Row( // Se crea una "caja" por cada uno de los caracteres del codigo para que el usuario los introduzca
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: List.generate(6, (index) {
-                      return Flexible(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 2.0),
-                          child: TextField(
-                            controller: controllers[index],
-                            focusNode: focusNodes[index],
-                            enabled: !isSending && !isLoadingDialog,
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            textAlign: TextAlign.center,
-                            maxLength: 1,
-                            keyboardType: TextInputType.text,
-                            decoration: const InputDecoration(
-                              counterText: "",
-                              border: OutlineInputBorder(),
-                              contentPadding: EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            onChanged: (value) {
-                              if (value.isNotEmpty) {
-                                if (index < 5) {
-                                  focusNodes[index + 1].requestFocus();
-                                } 
-                                else {
-                                  focusNodes[index].unfocus();
-                                  onCodeComplete();
-                                }
-                              } 
-                              else if (index > 0) {
-                                focusNodes[index - 1].requestFocus();
-                              }
-                            },
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                  if (errorText != null) ...[
-                    const SizedBox(height: 12),
-                    Text(errorText!, style: const TextStyle(color: Colors.red)),
-                  ],
-                ],
-              ),
-              actions: [ // Si pulsa el boton cancelar, se cierra la modal
-                TextButton(
-                  onPressed: isLoadingDialog || isSending ? null : () => Navigator.pop(context),
-                  child: const Text("Cancelar"),
-                ),
-                if (isLoadingDialog)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 16),
-                    child: SizedBox(
-                        height: 16, 
-                        width: 16, 
-                        child: CircularProgressIndicator(strokeWidth: 2)
-                    ),
-                  ),
-              ],
-            );
-          },
+      customMessage: "Para iniciar sesión, introduce el código que hemos enviado a tu email",
+      skipInitialSend: true, // El backend ya envió el email durante el primer intento de login
+      onSendCode: () async {
+        // Al reenviar hace un nuevo login sin code para que el backend genere y envíe otro código
+        await _apiService.login(username, password);
+      },
+      onVerifyCode: (code) async {
+        // Se hace el login con el code para verificar el 2FA y obtener los tokens JWT
+        final data = await _apiService.login(username, password, code: code);
+        return data != null && data['user'] != null;
+      },
+      // Si la verificacion es correcta, se muestra al usuario un mensaje de exito
+      onSuccess: () {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const HomePage(),
+          ),
         );
       },
     );

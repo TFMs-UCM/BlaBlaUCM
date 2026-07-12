@@ -1,4 +1,5 @@
 import 'package:blablaucm/models/pick_up_points_model.dart';
+import 'package:blablaucm/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/models/vehicle_model.dart';
@@ -6,7 +7,8 @@ import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/services/vehicles_service.dart';
 import 'package:blablaucm/services/api_service.dart';
 import 'package:blablaucm/providers/storage_provider.dart';
-import 'package:blablaucm/services/google_places_service.dart';
+import 'package:blablaucm/services/route_services/location_service.dart';
+import 'package:blablaucm/services/route_services/osm_service.dart';
 import 'package:blablaucm/screens/create_travel_steps.dart'; 
 import 'package:blablaucm/screens/helper.dart';
 
@@ -22,7 +24,7 @@ class CreatedTravelScreen extends StatefulWidget {
 class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
   final ApiService api = ApiService();
   final SecureStorageService storage = SecureStorageService();
-  final GooglePlacesService placesService = GooglePlacesService();
+  final LocationService placesService = OsmService();
 
   int currentStep = 0; // Pasos para crear un viaje: 0: Fecha, 1: Ruta, 2: Vehiculo, 3: Datos adicionales, 4: Resumen
   bool showError = false; // Muestra si hay error para no pasar al siguiente paso
@@ -191,30 +193,18 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
 
   // Ventana modal para mostar mensaje de exito
   void _showSuccessDialog() {
-    showDialog(
-      context: context,
+    showModal(
+      context,
+      "El viaje se ha creado correctamente y ya está publicado.",
+      title: "Viaje creado",
+      type: AlertType.success,
       barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text("Viaje creado"),
-          content: const Text("El viaje se ha creado correctamente y ya está publicado."),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.of(context).popUntil((route) => route.isFirst);
-              },
-              child: const Text("Aceptar"),
-            ),
-          ],
-        );
-      },
+      onAccepted: () => Navigator.of(context).popUntil((route) => route.isFirst),
     );
   }
 
   // Funcion para manejar el boton de siguiente, validando los campos del paso actual
-  void _handleNext() {
-
+  void _handleNext() async{
     setState(() => showError = false);
     // En el paso 0, se comprueba que se haya seleccionado una fecha
     if (currentStep == 0 && selectedDate == null) {
@@ -241,12 +231,26 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
         return;
       }
 
-      // Validacion de las coordenadas de las paradas intermedias
+      pickUpPoints.removeWhere((punto) => punto.name.isEmpty); // Se eliminan las paradas que esten vacias
+
+      // Validacion de las coordenadas y fechas de las paradas intermedias
       bool hasInvalidPickUpPoint = pickUpPoints.any((punto) => punto.lat == null || punto.lng == null);
-      if (hasInvalidPickUpPoint) {
+      bool hasNoDatePickUpPoint = pickUpPoints.any((punto) => punto.date == null);
+      if (hasInvalidPickUpPoint) { // Se valida que todas las paradas tengan coordenadas validas
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Por favor, selecciona las paradas intermedias desde las opciones del desplegable."), 
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => showError = true); 
+        return;
+      }
+      if(hasNoDatePickUpPoint) { // Se valida que todas las paradas tengan una fecha puesta
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Por favor, introduce una hora para las paradas intermedias."), 
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
@@ -273,7 +277,7 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
     if (currentStep == 3) {
       if(numSeatsCtrl.text.isNotEmpty){
         final seats = int.tryParse(numSeatsCtrl.text);
-        if (seats == null || seats < 1 || seats > vehicle.numSeats - 1) {
+        if (seats == null || seats < 1 || seats > vehicle.maxPassengers) {
           setState(() => showError = true); 
           return;
         }
@@ -286,7 +290,15 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
     }
     // Si todas las validaciones son correstas y es el ultimo paso, se puede crear el viaje
     if (currentStep == 4) {
-      _createTravel();
+      final accepted = await showConfirmationModal(
+        context,
+        title: "¿Publicar el viaje?",
+        confirmText: "Publicar",
+        message:"El viaje se publicará con la información introducida y será visible para otros usuarios. Podrás editarlo más tarde si lo necesitas",
+      );
+      if (accepted) {
+        _createTravel();
+      }
     } 
     else { // Si no es el ultimo paso, y las validaciones son correctas, se pasa al siguiente paso
       setState(() => currentStep++);
@@ -367,7 +379,7 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
               children: [
                 CircleAvatar(
                   radius: 18,
-                  backgroundColor: active || completed ? Colors.blue : Colors.grey.shade300, // El paso actual se muestra en otro color para diferenciarlo
+                  backgroundColor: active || completed ? AppColors.primary : Colors.grey.shade300, // El paso actual se muestra en otro color para diferenciarlo
                   child: active && isCreating
                       ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                       : Text("${index + 1}", style: const TextStyle(color: Colors.white)),
@@ -377,7 +389,7 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
                   steps[index],
                   style: TextStyle(
                     fontWeight: active ? FontWeight.bold : FontWeight.normal,
-                    color: active || completed ? Colors.black : Colors.grey, // Los completados tienen otro color para diferenciarlos
+                    color: active || completed ? AppColors.of(context).textPrimary : AppColors.of(context).textSecondary, // Los completados tienen otro color para diferenciarlos
                   ),
                 ),
               ],
@@ -401,16 +413,22 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (currentStep == 0) // Si es el paso 0, no hay un atras, es un cancelar para cerrar esta ventana e ir al menu principal
-              TextButton(onPressed: isCreating ? null : () => Navigator.pop(context), child: const Text("Cancelar"))
+              dialogButton(context, isAccept: false, label: "Cancelar", onPressed: isCreating ? null : () => Navigator.pop(context))
             else // Si no es el paso 0, se muestra el boton de atras para volver al paso anterior
-              TextButton(
+              dialogButton(
+                context,
+                isAccept: false,
+                label: "Atrás",
                 onPressed: isCreating ? null : () => setState(() { showError = false; currentStep--; }),
-                child: const Text("Atrás"),
               ),
             const SizedBox(width: 16),
-            ElevatedButton( // Si es el ultimo paso, el boton es el de crear, si no, es el de siguiente
-              onPressed: isCreating ? null : _handleNext,
-              child: isCreating ? const Text("Creando...") : Text(currentStep == 4 ? "Crear viaje" : "Siguiente"),
+            // Si es el ultimo paso, el boton es el de crear, si no, es el de siguiente
+            dialogButton(
+              context,
+              isAccept: true,
+              isLoading: isCreating,
+              label: currentStep == 4 ? "Crear viaje" : "Siguiente",
+              onPressed: _handleNext,
             ),
           ],
         ),

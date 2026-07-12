@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:blablaucm/screens/filter_options.dart';
 import 'package:blablaucm/screens/search_travel_list_view.dart';
 import 'package:blablaucm/models/enums.dart';
-import 'package:blablaucm/services/google_places_service.dart';
+import 'package:blablaucm/services/route_services/location_service.dart';
+import 'package:blablaucm/services/route_services/osm_service.dart';
 import 'package:blablaucm/screens/place_search_field.dart';
+import 'package:blablaucm/screens/helper.dart';
 
 // Pantalla de busqueda de viajes, esta es la pagina principal de busquedas donde se introducen los datos de busqueda (origen, destino, y fechas)
 // Ademas llama a la pantalla de filtros para filtrar los viajes
@@ -17,7 +19,7 @@ class SearchTravelPage extends StatefulWidget {
 
 class _SearchTravelPageState extends State<SearchTravelPage> {
   // Variable del servicio de Google places para el autocompletado y sacar las coordenadas de los lugares
-  final GooglePlacesService placesService = GooglePlacesService();
+  final LocationService placesService = OsmService();
 
   DateTime? fromDate;
   DateTime? untilDate;
@@ -41,6 +43,9 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
   double? destLng;
 
   String? errorMessage;
+
+  String? origin;
+  String? destination;
 
   @override
   void initState() {
@@ -94,6 +99,26 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
     }
   }
 
+  // Funcion para intercambiar el origen y el destino
+  void _swapOriginDest() {
+    FocusScope.of(context).unfocus(); // Se quita el foco para que no reaparezca el desplegable
+
+    setState(() {
+      final tmpText = _originController.text;
+      _originController.text = _destinationController.text;
+      _destinationController.text = tmpText;
+
+      final tmpLat = originLat;
+      final tmpLng = originLng;
+      originLat = destLat;
+      originLng = destLng;
+      destLat = tmpLat;
+      destLng = tmpLng;
+      origin = _originController.text;
+      destination = _destinationController.text;
+    });
+  }
+
   @override
   void dispose() {
     _originController.dispose();
@@ -145,40 +170,87 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
                           ),
                         ),
 
-                      PlaceSearchField( // Widget que se encarga de mostar el campo de origen
-                        controller: _originController,
-                        labelText: "Origen",
-                        errorText: errorMessage != null && _originController.text.isEmpty ? "Campo obligatorio" : null,
-                        iconColor: Colors.blue,
-                        placesService: placesService,
-                        onPlaceSelected: (suggestion, coords) {
-                          if (coords != null) {
-                            setState(() {
-                              originLat = coords['lat'];
-                              originLng = coords['lng'];
-                              errorMessage = null;
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                    
-                      // Campo destino
-                      PlaceSearchField( // Widget que se encarga de mostar el campo de destino
-                        controller: _destinationController,
-                        labelText: "Destino",
-                        errorText: errorMessage != null && _destinationController.text.isEmpty ? "Campo obligatorio" : null,
-                        iconColor: Colors.red, 
-                        placesService: placesService,
-                        onPlaceSelected: (suggestion, coords) {
-                          if (coords != null) {
-                            setState(() {
-                              destLat = coords['lat'];
-                              destLng = coords['lng'];
-                              errorMessage = null;
-                            });
-                          }
-                        },
+                      Stack(
+                        children: [
+                          Column(
+                            children: [
+                              // Se reserva espacio a la derecha para el boton de intercambio
+                              Padding(
+                                padding: const EdgeInsets.only(right: 56),
+                                child: PlaceSearchField(
+                                  controller: _originController,
+                                  labelText: "Origen",
+                                  errorText: errorMessage != null && _originController.text.isEmpty ? "Campo obligatorio" : null,
+                                  iconColor: Colors.blue,
+                                  placesService: placesService,
+                                  // Solo se llama a la api si el texto ha cambiado respecto al ultimo lugar confirmado (seleccionado o intercambiado)
+                                  suggestionsCallback: (pattern) async {
+                                    if (pattern.length < 3 || pattern.trim() == (origin ?? '').trim()) return [];
+                                    return await placesService.getAutocomplete(pattern);
+                                  },
+                                  onPlaceSelected: (suggestion, coords) {
+                                    if (coords != null) {
+                                      setState(() {
+                                        originLat = coords['lat'];
+                                        originLng = coords['lng'];
+                                        origin = _originController.text; // Se guarda el lugar confirmado
+                                        errorMessage = null;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Padding(
+                                padding: const EdgeInsets.only(right: 56),
+                                child: PlaceSearchField(
+                                  controller: _destinationController,
+                                  labelText: "Destino",
+                                  errorText: errorMessage != null && _destinationController.text.isEmpty ? "Campo obligatorio" : null,
+                                  iconColor: Colors.red,
+                                  placesService: placesService,
+                                  // Solo se llama a la api si el texto ha cambiado respecto al ultimo lugar confirmado (seleccionado o intercambiado)
+                                  suggestionsCallback: (pattern) async {
+                                    if (pattern.length < 3 || pattern.trim() == (destination ?? '').trim()) return [];
+                                    return await placesService.getAutocomplete(pattern);
+                                  },
+                                  onPlaceSelected: (suggestion, coords) {
+                                    if (coords != null) {
+                                      setState(() {
+                                        destLat = coords['lat'];
+                                        destLng = coords['lng'];
+                                        destination = _destinationController.text; // Se guarda el lugar confirmado
+                                        errorMessage = null;
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Boton de intercambio, cambia el origen por el destino y viceversa
+                          Positioned.fill(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: Tooltip(
+                                message: "Intercambiar origen y destino",
+                                child: Material(
+                                  color: Theme.of(context).cardColor,
+                                  shape: CircleBorder(side: BorderSide(color: Colors.grey.shade300)),
+                                  elevation: 2,
+                                  child: InkWell(
+                                    customBorder: const CircleBorder(),
+                                    onTap: _swapOriginDest,
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(8),
+                                      child: Icon(Icons.swap_vert, color: Colors.blue),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 16),
                       TextField(
@@ -207,7 +279,6 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
                         child: Center(
                           child: SizedBox(
                             width: 200,
-                            height: 40,
                             child: ElevatedButton(
                               onPressed: () async {
                                 final result = await Navigator.push(
@@ -235,10 +306,8 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
                                   });
                                 }
                               },
-                              child: const Text(
-                                "Añadir filtros",
-                                style: TextStyle(fontSize: 16),
-                              ),
+                              style: AppButtonStyles.secondary,
+                              child: const Text("Añadir filtros"),
                             ),
                           ),
                         ),
@@ -304,10 +373,8 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
                       ),
                     );
                   },
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: const Text("Buscar", style: TextStyle(fontSize: 16)),
+                  style: AppButtonStyles.primary,
+                  child: const Text("Buscar"),
                 ),
               ),
             ],

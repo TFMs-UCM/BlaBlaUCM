@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
-import 'package:blablaucm/services/google_places_service.dart';
+import 'package:blablaucm/services/route_services/location_service.dart';
 
 // Widget para crear el campo de busqueda de lugares
 
@@ -10,7 +10,7 @@ class PlaceSearchField extends StatelessWidget {
   final String? errorText;
   final IconData icon;
   final Color iconColor;
-  final GooglePlacesService placesService;
+  final LocationService placesService;
   
 
   final Function(Map<String, dynamic> suggestion, Map<String, dynamic>? coords) onPlaceSelected;
@@ -58,7 +58,7 @@ class PlaceSearchField extends StatelessWidget {
       onSelected: (suggestion) async { // Se muestran los lugares que se reciben de google places
         controller.text = suggestion['description'];
         // Cuyando se selecciona uno, se realiza una llamada a la api, para sacar sus coordenadas
-        final coords = await placesService.getPlaceDetails(suggestion['place_id']);
+        final coords = await placesService.getPlaceDetails(suggestion);
         onPlaceSelected(suggestion, coords);
       },
     );

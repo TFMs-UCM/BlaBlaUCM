@@ -1,7 +1,9 @@
 import 'package:blablaucm/models/enums.dart';
 import 'package:flutter/material.dart';
 import 'package:blablaucm/models/travel_model.dart';
+import 'package:blablaucm/theme/app_colors.dart';
 import 'package:blablaucm/screens/search_travel_details.dart';
+import 'package:blablaucm/screens/env_sticker_widget.dart';
 import 'package:blablaucm/services/api_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/intl.dart';
@@ -389,17 +391,17 @@ class _SearchTravelListViewState extends State<SearchTravelListView> {
               const Divider(),
               const SizedBox(height: 8),
               // Se muesta la etiqueta medioambiental y el rol del conductor
-              Wrap(
-                spacing: 8.0, 
-                runSpacing: 4.0, 
+              Row(
                 children: [
-                  Chip(
-                    label: Text("Etiqueta: ${t.vehicle.envSticker!.label}"),
-                    backgroundColor: Colors.green.shade100,
-                  ),
-                  Chip(
-                    label: Text("Rol: ${t.driver.role.label}"),
-                    backgroundColor: Colors.blue.shade100,
+                  EnvStickerBadge(sticker: t.vehicle.envSticker, size: 32, showEmpty: true),
+                  if (t.isPeriodic) ...[
+                    const SizedBox(width: 8),
+                    const Icon(Icons.repeat, size: 18, color: Colors.grey),
+                  ],
+                  const Spacer(),
+                  Text(
+                    t.remainingSeats == 1 ? "1 plaza libre" : "${t.remainingSeats} plazas libres",
+                    style: const TextStyle(fontSize: 13, color: Colors.grey),
                   ),
                 ],
               ),
@@ -436,7 +438,7 @@ class NoResultsTravelCard extends StatelessWidget {
                   const Icon(
                     Icons.search_off,
                     size: 56,
-                    color: Color(0xFF1F51FF),
+                    color: AppColors.primary,
                   ),
                   const SizedBox(height: 12),
                   const Text(

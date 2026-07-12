@@ -1,14 +1,16 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:blablaucm/services/route_services/location_service.dart';
 
 // Servicio para realizar las peticiones a la api de Google Places
 
-class GooglePlacesService {
+class GooglePlacesService implements LocationService{
   // Carga la api key
-  final String _apiKey = dotenv.env['API_PLACES_KEY'] ?? '';
+  final String _apiKey = dotenv.env['API_GOOGLE_PLACES_KEY'] ?? '';
 
   // Funcion para obtener las sugerencias de lugares a partir del texto introducido
+  @override
   Future<List<Map<String, dynamic>>> getAutocomplete(String query) async {
     if (query.isEmpty) return []; // Solo se realiza la peticion si hay texto
 
@@ -52,7 +54,9 @@ class GooglePlacesService {
   }
 
   // Funcion que realiza una llamada a la api de google para sacar las coordenadas a partir del place_id
-  Future<Map<String, double>?> getPlaceDetails(String placeId) async {
+  @override
+  Future<Map<String, double>?> getPlaceDetails(Map<String, dynamic> suggestion) async {
+    final placeId = suggestion['place_id'];
     // Se crea la url
     final url = Uri.parse('https://places.googleapis.com/v1/$placeId');
     try {

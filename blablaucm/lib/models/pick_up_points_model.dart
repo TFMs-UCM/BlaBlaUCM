@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
 // Clase que represenat el modelo de datos de un punto de recogida
 class PickUpPointModel {
+  String id;
   String name; // Nombre
   TimeOfDay? date; // Hora de recogida
   double? lat; // latitud del punto de recogida
   double? lng; // longitud del punto de recogida
   TextEditingController controller; // Controlador para el campo de texto del nombre del punto de recogida
+  bool? isReached; // Indica si se ha llegado a ese punto o no
 
-  PickUpPointModel({required this.name, this.date, this.lat, this.lng}) : controller = TextEditingController(text: name);
+  PickUpPointModel({required this.id, required this.name, this.date, this.lat, this.lng, this.isReached}) : controller = TextEditingController(text: name);
 
-  // Funcion para crear una instancia de PickUpPointModel a partir de un JSON, extrayendo las coordenadas del formato que devuelve Django
+  // Funcion para cargar un punto de recogida a partir de un JSON
   factory PickUpPointModel.fromJson(Map<String, dynamic> json) {
     double? parsedLat;
     double? parsedLng;
 
-    // Hay que extraer las coordenadas del formato que devuelve django 
+    // Se extraen las coordenadas
     final pointString = json['point'] as String?;
     
     if (pointString != null && pointString.contains('POINT')) {
@@ -35,10 +37,12 @@ class PickUpPointModel {
     }
 
     return PickUpPointModel(
+      id: json['id_point'].toString(),
       name: json['direction'] ?? '', 
       date: json['date'] != null ? TimeOfDay.fromDateTime(DateTime.parse(json['date']).toLocal()) : null,
       lat: parsedLat,
       lng: parsedLng,
+      isReached: json['is_reached'] as bool?,
     );
   }
 }

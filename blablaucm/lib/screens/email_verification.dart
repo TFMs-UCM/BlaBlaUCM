@@ -12,36 +12,48 @@ class EmailVerification {
   static Future<void> sendVerificationEmail({required String username, String? email}) async {
     // Se construye en endpoint
     final endpoint = dotenv.env['VERIFICATION_EMAIL_ENDPOINT'] ?? '/users/verify_email/';
-    final queryParams = {'username': username};
-    
-    // Si se añade el email, se añade a los queryparams
-    if (email != null) queryParams['email'] = email;
-    
+
+    final Map<String, String> body = {'username': username};
+
+    // Si se añade el email, se añade al body
+    if (email != null) {
+      body['email'] = email;
+    }
+
     // Se realiza la peticion a la api
     await _api.requestToApi(
       endpoint, 
       requireAuthentication: false, 
-      queryParams: queryParams
+      body:body,
+      op: ApiOptions.post
     );
   }
 
   // Funcion para verificar el codigo
-  static Future<bool> verifyCode({required String username, required String code, String? email, bool validate = false}) async {
+  static Future<bool> verifyCode({required String username, required String code, String? email, String? password, bool validate = false}) async {
     final endpoint = dotenv.env['VERIFY_CODE_ENDPOINT'] ?? '/users/verify_code/';
-    final queryParams = {
-      'token': code, 
+    // Se añaden los paramentros al body
+    final Map<String, dynamic> body = {
       'username': username,
+      'token': code,
     };
-    
+
     // Si trae los parametros opcionales, se añaden
-    if (email != null) queryParams['email'] = email;
-    if (validate) queryParams['validate'] = 'true';
+    if (email != null) {
+      body['email'] = email;
+    }
+    if (password != null) {
+      body['password'] = password;
+    }
+    if (validate) {
+      body['validate'] = true;
+    }
 
     // Se realiza la peticion a la api
     final response = await _api.requestToApi(
       endpoint,
+      body: body,
       requireAuthentication: false,
-      queryParams: queryParams,
       op: ApiOptions.post,
     );
     
@@ -49,13 +61,13 @@ class EmailVerification {
   }
 
   // Modal para introduicir el codigo de verificacion de 6 digitos
-  static void showVerificationDialog({required BuildContext context, required String email, required Future<void> Function() onSendCode, 
-      required Future<bool> Function(String code) onVerifyCode, required VoidCallback onSuccess, String? customMessage}) {
+  static void showVerificationDialog({required BuildContext context, String? email, required Future<void> Function() onSendCode,
+      required Future<bool> Function(String code) onVerifyCode, required VoidCallback onSuccess, String? customMessage, bool skipInitialSend = false}) {
     List<TextEditingController> controllers = List.generate(6, (_) => TextEditingController());
     List<FocusNode> focusNodes = List.generate(6, (_) => FocusNode()); // Se crea un Focus node para cada uno de los caracteres
     bool isLoading = false;
-    bool isSending = true;
-    bool hasSent = false;
+    bool isSending = !skipInitialSend;
+    bool hasSent = skipInitialSend;
     String? errorText;
 
     showDialog(
@@ -115,7 +127,7 @@ class EmailVerification {
               }
             }
 
-            final displayMessage = customMessage ?? "Código enviado a:\n$email";
+            final displayMessage = customMessage ?? (email != null ? "Código enviado a:\n$email" : "Código enviado");
 
             return AlertDialog(
               title: const Text("Verificación"),

@@ -11,9 +11,16 @@ class ImagePickerService {
   // Permite seleccionar una imagen desde la camara o desde la galeria, dependiendo del source que se le pase
   Future<PickedImage?> pickUpImage(ImageSource source) async {
     // Se obtiene la imagen dependiendo del source, si el usuario cancela se devuelve null
-    final XFile? image = await _picker.pickImage(source: source);
+    final XFile? image = await _picker.pickImage(source: source, imageQuality: 70, maxWidth: 1024, maxHeight: 1024);
 
     if (image == null) return null; // Si no hay imegen, se devuelve null
+
+    final int fileLength = await image.length();
+
+    if (fileLength > 2097152) {
+      // Si la imagen es mayor que 2MB se lanza excepcion
+      throw Exception('La imagen es demasiado pesada. El tamaño máximo permitido es 2MB.');
+    }
 
     if (kIsWeb) { // Si esta en la web, se lee como bytes
       final bytes = await image.readAsBytes();

@@ -9,6 +9,9 @@ import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/models/user_model.dart';
 import 'package:blablaucm/models/vehicle_model.dart';
 import 'package:blablaucm/screens/helper.dart';
+import 'package:blablaucm/screens/env_sticker_widget.dart';
+import 'package:blablaucm/theme/app_colors.dart';
+import 'package:share_plus/share_plus.dart';
 
 // Pantalla para mostrar los viajes creados por el usuario
 class CreatedTravelsScreen extends StatelessWidget {
@@ -21,12 +24,12 @@ class CreatedTravelsScreen extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text("Viajes creados"),
-          bottom: const TabBar(
-            labelColor: Colors.blue,
-            unselectedLabelColor: Colors.black,
-            indicatorColor: Colors.blue,
+          bottom: TabBar(
+            labelColor: AppColors.primary,
+            unselectedLabelColor: AppColors.of(context).textSecondary,
+            indicatorColor: AppColors.primary,
             // Hay un tab menu con los distintos tipos de viajes creados, pendientes, pasados y solicitudes recibidas
-            tabs: [
+            tabs: const [
               Tab(text: "Pendientes"), // Los viajes en estado activo que aun no se han realizado
               Tab(text: "Pasados"), // Los viajes ya realizados
               Tab(text: "Solicitudes"), // Las solicitudes recibidas a los viajes creados
@@ -69,6 +72,9 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
   bool _isFetchingMore = false;
   bool _hasMore = true;
   String? _nextUrl;
+
+  bool _isSelecting = false;
+  final Set<String> _selectedIds = {};
 
   @override
   void initState() {
@@ -139,9 +145,103 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
         _hasMore = _nextUrl != null;
         _isFetchingMore = false;
       });
-    } else {
+    } 
+    else {
       setState(() => _isFetchingMore = false);
     }
+  }
+
+  // Se entra al modo seleccion para poder seleccionar varios viajes y eliminarlos o compartirlos
+  void _enterSelectionMode(TravelModel t) {
+    setState(() {
+      _isSelecting = true;
+      _selectedIds.add(t.id);
+    });
+  }
+
+  // Cambia entre seleccionado y no seleccionado
+  void _toggleSelection(TravelModel t) {
+    setState(() {
+      if (_selectedIds.contains(t.id)) {
+        _selectedIds.remove(t.id);
+        if (_selectedIds.isEmpty){
+          _isSelecting = false;
+        }
+      } 
+      else {
+        _selectedIds.add(t.id);
+      }
+    });
+  }
+
+  // Cancela el modo seleccion, deseleccionando todos los viajes
+  void _cancelSelection() {
+    setState(() {
+      _isSelecting = false;
+      _selectedIds.clear();
+    });
+  }
+
+  // Elimina los viajes seleccionados
+  Future<void> _deleteSelected() async {
+    final count = _selectedIds.length;
+    final confirm = await showConfirmationModal(
+      context,
+      title: "Eliminar viajes",
+      message: "¿Estás seguro de que quieres eliminar ${count == 1 ? 'este viaje' : 'estos $count viajes'}?",
+      confirmText: "Eliminar",
+      confirmColor: Colors.red,
+    );
+    if (!confirm) return;
+
+    final idsToDelete = Set<String>.from(_selectedIds);
+    setState(() {
+      _isSelecting = false;
+      _selectedIds.clear();
+      _isLoading = true;
+    });
+
+    ApiService api = ApiService();
+    // Se construye el endpoint para eliminar los viajes
+    final endpoint = dotenv.env['TRAVELS_ENDPOINT'] ?? '/travel/';
+    bool allSuccess = true;
+
+    for (final id in idsToDelete) {
+      // Se realiza una peticion por cada uno de los viajes
+      final response = await api.requestToApi("$endpoint$id/", op: ApiOptions.delete);
+      if (response == null || response.containsKey("error") || response["status"] == "error") {
+        allSuccess = false;
+      }
+    }
+
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    await _fetchInitialData();
+    if (!allSuccess && mounted) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text("Algunos viajes no se pudieron eliminar"), backgroundColor: Colors.orange),
+      );
+    }
+  }
+
+  // Funcion para compartir los viajes seleccionados, se comparte la informacion basica del viaje
+  void _shareSelected() {
+    final selected = _travels.where((t) => _selectedIds.contains(t.id)).toList();
+    final sb = StringBuffer();
+    for (var i = 0; i < selected.length; i++) {
+      final t = selected[i];
+      final salida = t.startDate;
+      final llegada = salida.add(Duration(minutes: t.duration));
+      final fecha = DateFormat("EEEE, d 'de' MMMM 'de' yyyy", "es_ES").format(salida);
+      final horaSalida = "${salida.hour.toString().padLeft(2, '0')}:${salida.minute.toString().padLeft(2, '0')}";
+      final horaLlegada = "${llegada.hour.toString().padLeft(2, '0')}:${llegada.minute.toString().padLeft(2, '0')}";
+      sb.writeln("${t.origin} → ${t.destination}");
+      sb.writeln("${fecha[0].toUpperCase()}${fecha.substring(1)}");
+      sb.writeln("Salida: $horaSalida  |  Llegada: $horaLlegada");
+      sb.writeln("Plazas disponibles: ${t.remainingSeats}/${t.numSeats}");
+      if (i < selected.length - 1) sb.writeln();
+    }
+    Share.share(sb.toString().trim());
   }
 
   // Funcion para agrupar los viajes por mes, para que se vea mejor
@@ -163,26 +263,77 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
     // Se agrupan los viajes por mes
     final grouped = _groupByMonth(_travels);
 
-    return ListView(
-      controller: _scrollController,
+    return Column(
       children: [
-        ...grouped.entries.map((entry) {
-          final monthLabel = entry.key;
-          final monthTravels = entry.value;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        if (_isSelecting)
+          Container(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Text(
+                  "${_selectedIds.length} ${_selectedIds.length == 1 ? 'viaje seleccionado' : 'viajes seleccionados'}",
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                TextButton(onPressed: _cancelSelection, child: const Text("Cancelar")),
+              ],
+            ),
+          ),
+        Expanded(
+          child: ListView(
+            controller: _scrollController,
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Text(monthLabel, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              ),
               // Se añaden los viajes de ese mes
-              ...monthTravels.map(_buildTravelCard),
+              ...grouped.entries.map((entry) {
+                final monthLabel = entry.key;
+                final monthTravels = entry.value;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Text(monthLabel, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    ),
+                    ...monthTravels.map(_buildTravelCard),
+                  ],
+                );
+              }),
+              if (_isFetchingMore)
+                const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: CircularProgressIndicator())),
             ],
-          );
-        }),
-        if (_isFetchingMore)
-          const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: CircularProgressIndicator())),
+          ),
+        ),
+        if (_isSelecting)
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, -2)),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _selectedIds.isEmpty ? null : _shareSelected,
+                    icon: const Icon(Icons.share),
+                    label: const Text("Compartir"),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _selectedIds.isEmpty ? null : _deleteSelected,
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                    icon: const Icon(Icons.delete),
+                    label: const Text("Eliminar"),
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -196,10 +347,16 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
     final diaMes = salida.day.toString();
     final horaSalida = "${salida.hour.toString().padLeft(2, '0')}:${salida.minute.toString().padLeft(2, '0')}";
     final horaLlegada = "${llegada.hour.toString().padLeft(2, '0')}:${llegada.minute.toString().padLeft(2, '0')}";
+    final bool isSelected = _selectedIds.contains(t.id);
 
     return GestureDetector(
-      onTap: () async { 
         // Para que al pulsar sobre el viaje se navege hasta la pantalla de detalles
+      onLongPress: _isSelecting ? null : () => _enterSelectionMode(t),
+      onTap: () async {
+        if (_isSelecting) {
+          _toggleSelection(t);
+          return;
+        }
         final result = await Navigator.push(
           context,
           MaterialPageRoute(
@@ -217,79 +374,86 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         elevation: 3,
+        color: isSelected ? AppColors.primary.withValues(alpha: 0.08) : null,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
+          padding: EdgeInsets.fromLTRB(_isSelecting ? 4 : 14, 14, 14, 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(diaSemana[0].toUpperCase() + diaSemana.substring(1), style: const TextStyle(fontSize: 14, color: Colors.grey)),
-                      Text(diaMes, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              if (_isSelecting)
+                Checkbox(
+                  value: isSelected,
+                  onChanged: (_) => _toggleSelection(t),
+                  activeColor: AppColors.primary,
+                ),
+              Expanded(
+                child: Column(
+                  children: [
+                    Row(
                       children: [
-                        Row(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Text(
-                                t.origin, 
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(horaSalida, style: const TextStyle(color: Colors.grey)),
+                            Text(diaSemana[0].toUpperCase() + diaSemana.substring(1), style: const TextStyle(fontSize: 14, color: Colors.grey)),
+                            Text(diaMes, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        const Icon(Icons.arrow_forward, size: 20),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                t.destination, 
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                overflow: TextOverflow.ellipsis,
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      t.origin,
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(horaSalida, style: const TextStyle(color: Colors.grey)),
+                                ],
                               ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(horaLlegada, style: const TextStyle(color: Colors.grey)),
-                          ],
+                              const SizedBox(height: 4),
+                              const Icon(Icons.arrow_forward, size: 20),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      t.destination,
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(horaLlegada, style: const TextStyle(color: Colors.grey)),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Divider(),
-              const SizedBox(height: 8),
-              
-              SizedBox(
-                width: double.infinity, 
-                child: Wrap(
-                  alignment: WrapAlignment.spaceBetween, 
-                  spacing: 8.0, 
-                  runSpacing: 4.0, 
-                  children: [
-                    Chip(
-                      label: Text("Etiqueta: ${t.vehicle.envSticker?.label ?? "-"}"), 
-                      backgroundColor: Colors.green.shade100,
-                      side: BorderSide.none, 
-                    ),
-                    Chip(
-                      label: Text("Rol: ${t.driver.role.label}"), 
-                      backgroundColor: Colors.blue.shade100, 
-                      side: BorderSide.none, 
+                    const SizedBox(height: 12),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        EnvStickerBadge(sticker: t.vehicle.envSticker, size: 32, showEmpty: true),
+                        if (t.isPeriodic) ...[
+                          const SizedBox(width: 12),
+                          const Icon(Icons.repeat, size: 18, color: Colors.grey),
+                        ],
+                        const Spacer(),
+                        Text(
+                          "${t.numSeats - t.remainingSeats} / ${t.numSeats} pasajeros",
+                          style: const TextStyle(fontSize: 13, color: Colors.grey),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -399,7 +563,7 @@ class _PaginatedRequestListState extends State<PaginatedRequestList> {
       message: (isAccepting 
         ? "¿Está seguro que desea aceptar esta solicitud?"
         : "¿Está seguro que desea rechazar esta solicitud?"),
-      confirmText: (isAccepting ? "Sí, confirmar" : "Sí, rechazar"),
+      confirmText: (isAccepting ? "Sí, aceptar" : "Sí, rechazar"),
       cancelText: "Cancelar"
     );
 
@@ -433,7 +597,7 @@ class _PaginatedRequestListState extends State<PaginatedRequestList> {
               ? "Solicitud aprobada correctamente." 
               : "Solicitud rechazada correctamente."),
             title: "Éxito",
-            isError: false
+            type: AlertType.success
           );
           
         } 

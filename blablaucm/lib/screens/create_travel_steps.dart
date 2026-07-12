@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:blablaucm/models/pick_up_points_model.dart';
+import 'package:blablaucm/theme/app_colors.dart';
 import 'package:blablaucm/models/vehicle_model.dart';
 import 'package:blablaucm/models/enums.dart';
-import 'package:blablaucm/services/google_places_service.dart';
+import 'package:blablaucm/services/route_services/location_service.dart';
 import 'package:blablaucm/screens/created_vehicle_details.dart';
 import 'package:blablaucm/screens/place_search_field.dart';
+import 'package:blablaucm/screens/helper.dart';
+import 'package:blablaucm/screens/vehicle_picker_modal.dart';
+import 'package:blablaucm/screens/env_sticker_widget.dart';
 
 // Pantalla para mostrar los pasos de creacion de un viaje
 
@@ -40,9 +44,11 @@ class DateStepWidget extends StatelessWidget {
           // Para obtener la fecha y hora, primero se selecciona la fecha y luego la hora
           const SizedBox(height: 24),
           // Seleccion de fecha
-          ElevatedButton.icon(
-            icon: const Icon(Icons.calendar_month),
-            label: const Text("Seleccionar fecha y hora"),
+          dialogButton(
+            context,
+            isAccept: true,
+            icon: Icons.calendar_month,
+            label: "Seleccionar fecha y hora",
             onPressed: () async {
               final pickedDate = await showDatePicker(
                 context: context,
@@ -98,7 +104,7 @@ class RouteStepWidget extends StatelessWidget {
   final TextEditingController durationCtrl;
   final bool showError;
   final List<PickUpPointModel> pickUpPoints;
-  final GooglePlacesService placesService; // Servicio de google places para el autocompletado y sacar las coordenadas
+  final LocationService placesService; // Servicio para el autocompletado y sacar las coordenadas
   final Function(double lat, double lng, bool isOrigin) onCoordsUpdated;
   final VoidCallback onPickUpPointsChanged;
 
@@ -241,7 +247,7 @@ class RouteStepWidget extends StatelessWidget {
                                 suffixIcon: Icon(Icons.access_time, size: 20),
                               ),
                               child: Text(
-                                pickUpPoint.date != null ? '${pickUpPoint.date!.hour.toString().padLeft(2, '0')}:${pickUpPoint.date!.minute.toString().padLeft(2, '0')}' : "00:00",
+                                pickUpPoint.date != null ? '${pickUpPoint.date!.hour.toString().padLeft(2, '0')}:${pickUpPoint.date!.minute.toString().padLeft(2, '0')}' : "--:--",
                                 style: TextStyle(
                                   color: pickUpPoint.date != null ? Theme.of(context).textTheme.bodyLarge?.color: Colors.grey,
                                 ),
@@ -264,15 +270,18 @@ class RouteStepWidget extends StatelessWidget {
                 )),
             // Boton para añadir una parada
             const SizedBox(height: 12),
-            ElevatedButton.icon(
+            dialogButton(
+              context,
+              isAccept: true,
+              icon: Icons.add,
+              label: "Añadir parada",
               onPressed: () {
                 pickUpPoints.add(PickUpPointModel(
+                  id:"",
                   name: "", // Se añade sin nombre, para que el usuario lo introduzca
                 ));
                 onPickUpPointsChanged();
               },
-              icon: const Icon(Icons.add),
-              label: const Text("Añadir parada"),
             ),
           ],
         ),
@@ -298,97 +307,64 @@ class VehicleStepWidget extends StatelessWidget {
     required this.onSelectVehicle, required this.onLoadMore, required this.onVehicleCreated
   });
 
-  void _openVehicleModal(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: Container(
-            width: double.maxFinite, 
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text("Selecciona un vehículo", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 16),
-                // Cuando se abra la modal, si no tiene vehiculos, se le informa para que cree uno
-                if (isLoadingVehicles) const CircularProgressIndicator()
-                else if (userVehicles.isEmpty) const Text("No tienes vehículos registrados.")
-                else ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
-                  // No se cargan todos los vehiculos de golpe, se cargan segun el usuario se deplaza hacia abajo en la lista
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: (ScrollNotification scrollInfo) { // Si el usuario hace scroll carga mas vehiculos
-                      if (scrollInfo is ScrollUpdateNotification && !isLoadingMoreVehicles && nextVehiclesUrl != null && scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 50) {
-                        onLoadMore(onModalUpdate: () => setModalState(() {}));
-                      }
-                      return false;
-                    },
-                    child: ListView.builder(
-                      shrinkWrap: true, 
-                      itemCount: userVehicles.length + (isLoadingMoreVehicles ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index == userVehicles.length) return const Padding(padding: EdgeInsets.all(16.0), child: Center(child: CircularProgressIndicator()));
-                        final v = userVehicles[index];
-                        // Se muestran los datos del vehiculo y un check si esta marcado para usarse en ese viaje
-                        return ListTile(
-                          leading: const Icon(Icons.directions_car), 
-                          title: Text(v.vehiclePreview()), 
-                          subtitle: Text("${v.numSeats} asientos en total"),
-                          trailing: vehicle.id == v.id ? const Icon(Icons.check_circle, color: Colors.blue) : null,
-                          onTap: () { 
-                            onSelectVehicle(v); 
-                            Navigator.pop(context); 
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                // Se le da la opcion al usuario de crear otro vehiculo
-                ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => CreatedVehicleDetailsScreen(onSave: onVehicleCreated)));
-                  },
-                  icon: const Icon(Icons.add), label: const Text("Crear nuevo vehículo"),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.directions_car, size: 70, color: Colors.blue),
+          if (vehicle.id != "temp")
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Icon(Icons.directions_car, size: 70, color: Colors.blue),
+                const SizedBox(width: 8),
+                EnvStickerBadge(sticker: vehicle.envSticker, size: 48, showEmpty: true),
+              ],
+            )
+          else
+            const Icon(Icons.directions_car, size: 70, color: Colors.blue),
           const SizedBox(height: 20),
           if (vehicle.id != "temp")
             Card(
               margin: const EdgeInsets.symmetric(horizontal: 20),
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 child: Column(
                   children: [
-                    Text(vehicle.vehiclePreview(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Text("Capacidad: ${vehicle.numSeats} asientos"),
-                    if (vehicle.envSticker != null) Text("Etiqueta: ${vehicle.envSticker!.label}"),
+                    Text(vehicle.vehiclePreview, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(
+                      "${vehicle.plate} · ${vehicle.numSeats} asientos",
+                      style: const TextStyle(fontSize: 13, color: Colors.grey),
+                    ),
                   ],
                 ),
               ),
             )
           else const Text("Por favor, seleccione un vehículo", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
-          ElevatedButton.icon(onPressed: () => _openVehicleModal(context), icon: const Icon(Icons.arrow_drop_down), label: const Text("Vehículos disponibles")),
+          dialogButton(
+            context,
+            isAccept: true,
+            icon: Icons.arrow_drop_down,
+            label: "Vehículos disponibles",
+            onPressed: () => showVehiclePickerModal(
+              context,
+              selectedVehicle: vehicle,
+              vehicles: userVehicles,
+              isLoadingVehicles: isLoadingVehicles,
+              isLoadingMoreVehicles: isLoadingMoreVehicles,
+              nextVehiclesUrl: nextVehiclesUrl,
+              onSelectVehicle: onSelectVehicle,
+              onLoadMore: onLoadMore,
+              onCreateNewVehicle: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => CreatedVehicleDetailsScreen(onSave: onVehicleCreated)),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -501,23 +477,25 @@ class TravelDataStepWidget extends StatelessWidget {
                         children: [
                           const Text("Fecha de finalización:", style: TextStyle(fontWeight: FontWeight.bold)),
                           Text(endPeriodicDate == null ? "No seleccionada" : "${endPeriodicDate!.day.toString().padLeft(2, '0')}/${endPeriodicDate!.month.toString().padLeft(2, '0')}/${endPeriodicDate!.year}",
-                            style: TextStyle(color: (showError && endPeriodicDate == null) ? Colors.red : Colors.black),
+                            style: TextStyle(color: (showError && endPeriodicDate == null) ? Colors.red : AppColors.of(context).textPrimary),
                           ),
                         ],
                       ),
-                      ElevatedButton(
+                      dialogButton(
+                        context,
+                        isAccept: true,
+                        label: "Seleccionar",
                         onPressed: () async {
                           final initial = selectedDate != null ? selectedDate!.add(const Duration(days: 1)) : DateTime.now();
                           final picked = await showDatePicker(
-                            context: context, 
-                            initialDate: endPeriodicDate ?? initial, 
-                            firstDate: initial, lastDate: DateTime(2100), 
+                            context: context,
+                            initialDate: endPeriodicDate ?? initial,
+                            firstDate: initial, lastDate: DateTime(2100),
                             locale: const Locale('es', 'ES'),
-                            cancelText: 'Cancelar', 
+                            cancelText: 'Cancelar',
                             confirmText: 'Aceptar');
                           if (picked != null) onEndDateSelected(picked);
                         },
-                        child: const Text("Seleccionar"),
                       ),
                     ],
                   ),
@@ -541,13 +519,15 @@ class TravelDataStepWidget extends StatelessWidget {
                 )),
                 const SizedBox(height: 12),
                 Center(
-                  child: ElevatedButton.icon(
+                  child: dialogButton(
+                    context,
+                    isAccept: true,
+                    icon: Icons.block,
+                    label: "Añadir restricción",
                     onPressed: () {
                       final available = UsersType.values.where((u) => u != UsersType.all && !restrictedUserTypes.contains(u)).toList();
                       if (available.isNotEmpty) { restrictedUserTypes.add(available.first); onRestrictionsChanged(); }
                     },
-                    icon: const Icon(Icons.block, size: 18), label: const Text("Añadir restricción"),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade200, foregroundColor: Colors.black),
                   ),
                 ),
               ],
@@ -622,16 +602,18 @@ class SummaryStepWidget extends StatelessWidget {
                 _summaryRow(Icons.location_on, "Ruta", "$origin ➔ $destination"),
                 _summaryRow(Icons.timer, "Duración", "$duration min"),
                 _summaryRow(Icons.people, "Plazas publicadas", numSeats),
-                if (pickUpPoints.isNotEmpty) _summaryRow(Icons.add_road, "Paradas", pickUpPoints.map((s) => s.name).join(", ")),
-                _summaryRow(Icons.directions_car, "Vehículo", vehicle.vehiclePreview()),
+                if (pickUpPoints.isNotEmpty) 
+                  _summaryRow(Icons.add_road,"Paradas",pickUpPoints.asMap().entries.map((e) => "${e.key + 1}. ${e.value.name}").join("\n\n")),
+                _summaryRow(Icons.directions_car, "Vehículo", vehicle.vehiclePreviewWithPlate),
                 // Si es periodico, se muestra adicionalmente el intervalo de repeticion y la fecha de fin de repeticion
                 if (travelType == TravelType.periodic) ...[
                   _summaryRow(Icons.event_repeat, "Tipo", "Periódico (cada $periodicDays días)"),
                   if (endPeriodicDate != null) _summaryRow(Icons.event_busy, "Fecha fin", "${endPeriodicDate!.day.toString().padLeft(2, '0')}/${endPeriodicDate!.month.toString().padLeft(2, '0')}/${endPeriodicDate!.year}"),
-                ] else _summaryRow(Icons.event_repeat, "Tipo", "Puntual"),
+                ] 
+                else _summaryRow(Icons.event_repeat, "Tipo", "Puntual"),
                 const SizedBox(height: 10),
                 const Text("Usuarios Restringidos:", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
-                Text(restrictedUserTypes.isEmpty ? "Ninguno (Todos permitidos)" : restrictedUserTypes.map((u) => u.label).join(", "), style: const TextStyle(color: Colors.black54)),
+                Text(restrictedUserTypes.isEmpty ? "Ninguno (Todos permitidos)" : restrictedUserTypes.map((u) => u.label).join(", "), style: TextStyle(color: AppColors.of(context).textSecondary)),
               ],
             ),
           ),

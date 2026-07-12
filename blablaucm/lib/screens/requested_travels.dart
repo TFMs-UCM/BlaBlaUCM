@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:blablaucm/models/travel_model.dart';
 import 'package:intl/intl.dart';
 import 'package:blablaucm/screens/requested_travels_details.dart';
+import 'package:blablaucm/screens/env_sticker_widget.dart';
 import 'package:blablaucm/services/api_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/providers/storage_provider.dart';
 import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/models/request_travel_model.dart';
+import 'package:blablaucm/theme/app_colors.dart';
+import 'package:blablaucm/screens/helper.dart';
+import 'package:share_plus/share_plus.dart';
 
 // Pantalla para mostrar la lista de viajes solicitados por el usuario
 // Se presentan en 3 tabs, dependiendo del estado de la solicitud: 
@@ -25,11 +29,11 @@ class RequestedTravelsScreen extends StatelessWidget {
       child: Scaffold(
         appBar: AppBar(
           title: const Text("Viajes solicitados"),
-          bottom: const TabBar(
-            labelColor: Colors.blue,
-            unselectedLabelColor: Colors.black,
-            indicatorColor: Colors.blue,
-            tabs: [ // Cada uno de los tabs que tiene la pantalla
+          bottom: TabBar(
+            labelColor: AppColors.primary,
+            unselectedLabelColor: AppColors.of(context).textSecondary,
+            indicatorColor: AppColors.primary,
+            tabs: const [ // Cada uno de los tabs que tiene la pantalla
               Tab(text: "Pendientes"),
               Tab(text: "Pasados"),
               Tab(text: "Solicitudes"),
@@ -69,11 +73,14 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
   final ScrollController _scrollController = ScrollController(); 
   final SecureStorageService _storage = SecureStorageService();
   
-  List<RequestTravelModel> _travels = []; 
+  List<RequestTravelModel> _travels = [];
   bool _isLoading = true;
   bool _isFetchingMore = false;
   bool _hasMore = true;
   String? _nextUrl;
+
+  bool _isSelecting = false;
+  final Set<String> _selectedIds = {};
 
   @override
   void initState() {
@@ -116,6 +123,7 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
             requestId: (req['id'] ?? req['id_request']).toString(),
             travel: TravelModel.fromJson(req['id_travel'] ?? {}),
             status: parseEnum<RequestStatus>(req['status'], RequestStatus.values),
+            code: req['validation_code']?.toString(),
           );
         }).toList();
         
@@ -146,6 +154,7 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
             requestId: (req['id'] ?? req['id_request']).toString(),
             travel: TravelModel.fromJson(req['id_travel'] ?? {}),
             status: parseEnum<RequestStatus>(req['status'], RequestStatus.values),
+            code: req['validation_code']?.toString(),
           );
         }).toList();
 
@@ -158,6 +167,98 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
     else { // Si no devuelve nada, no se actualiza nada
       setState(() => _isFetchingMore = false);
     }
+  }
+
+  // Se entra al modo seleccion para poder seleccionar varios viajes y eliminarlos o compartirlos
+  void _enterSelectionMode(RequestTravelModel item) {
+    setState(() {
+      _isSelecting = true;
+      _selectedIds.add(item.requestId);
+    });
+  }
+
+  // Cambia entre seleccionado y no seleccionado
+  void _toggleSelection(RequestTravelModel item) {
+    setState(() {
+      if (_selectedIds.contains(item.requestId)) {
+        _selectedIds.remove(item.requestId);
+        if (_selectedIds.isEmpty){
+          _isSelecting = false;
+        }
+      } 
+      else {
+        _selectedIds.add(item.requestId);
+      }
+    });
+  }
+
+  // Cancela el modo seleccion, deseleccionando todos los viajes
+  void _cancelSelection() {
+    setState(() {
+      _isSelecting = false;
+      _selectedIds.clear();
+    });
+  }
+
+  // Elimina los viajes seleccionados
+  Future<void> _deleteSelected() async {
+    final count = _selectedIds.length;
+    final confirm = await showConfirmationModal(
+      context,
+      title: "Eliminar solicitudes",
+      message: "¿Estás seguro de que quieres eliminar ${count == 1 ? 'esta solicitud' : 'estas $count solicitudes'}?",
+      confirmText: "Eliminar solicitud${count == 1 ? '' : 'es'}",
+      confirmColor: Colors.red,
+    );
+    if (!confirm) return;
+
+    final idsToCancel = Set<String>.from(_selectedIds);
+    setState(() {
+      _isSelecting = false;
+      _selectedIds.clear();
+      _isLoading = true;
+    });
+
+    ApiService api = ApiService();
+    // Se construye el endpoint para eliminar los viajes
+    final endpoint = dotenv.env['REQUEST_TRAVELS_ENDPOINT'] ?? '/requesttravel/';
+    bool allSuccess = true;
+
+    for (final id in idsToCancel) {
+      // Se realiza una peticion por cada uno de los viajes
+      final response = await api.requestToApi("$endpoint$id/",op: ApiOptions.delete);
+      if (response == null || response.containsKey("error") || response["status"] == "error") {
+        allSuccess = false;
+      }
+    }
+
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    await _fetchInitialData();
+    if (!allSuccess && mounted) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text("Algunas solicitudes no se pudieron cancelar"), backgroundColor: Colors.orange),
+      );
+    }
+  }
+  // Funcion para compartir los viajes seleccionados, se comparte la informacion basica del viaje
+  void _shareSelected() {
+    final selected = _travels.where((item) => _selectedIds.contains(item.requestId)).toList();
+    final sb = StringBuffer();
+    for (var i = 0; i < selected.length; i++) {
+      final t = selected[i].travel;
+      final salida = t.startDate;
+      final llegada = salida.add(Duration(minutes: t.duration));
+      final fecha = DateFormat("EEEE, d 'de' MMMM 'de' yyyy", "es_ES").format(salida);
+      final horaSalida = "${salida.hour.toString().padLeft(2, '0')}:${salida.minute.toString().padLeft(2, '0')}";
+      final horaLlegada = "${llegada.hour.toString().padLeft(2, '0')}:${llegada.minute.toString().padLeft(2, '0')}";
+      sb.writeln("${t.origin} → ${t.destination}");
+      sb.writeln("${fecha[0].toUpperCase()}${fecha.substring(1)}");
+      sb.writeln("Salida: $horaSalida  |  Llegada: $horaLlegada");
+      sb.writeln("Conductor: @${t.driver.username}");
+      if (i < selected.length - 1) sb.writeln();
+    }
+    Share.share(sb.toString().trim());
   }
 
   // Funcion para mostrar las solicitudes agrupadas por meses
@@ -181,25 +282,76 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
     // Se agrupan los viajes por meses
     final grouped = _groupByMonth(_travels);
 
-    return ListView(// Se muestran los viajes
-      controller: _scrollController,
-      children: [ 
-        ...grouped.entries.map((entry) {
-          final monthLabel = entry.key;
-          final monthTravels = entry.value;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      children: [
+        if (_isSelecting)
+          Container(
+            color: AppColors.primary.withValues(alpha: 0.1),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Text(
+                  "${_selectedIds.length} ${_selectedIds.length == 1 ? 'solicitud seleccionada' : 'solicitudes seleccionadas'}",
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                TextButton(onPressed: _cancelSelection, child: const Text("Cancelar")),
+              ],
+            ),
+          ),
+        Expanded(
+          child: ListView(
+            controller: _scrollController,
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Text(monthLabel, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              ),
-              ...monthTravels.map(_buildTravelCard),
+              ...grouped.entries.map((entry) {
+                final monthLabel = entry.key;
+                final monthTravels = entry.value;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      child: Text(monthLabel, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    ),
+                    ...monthTravels.map(_buildTravelCard),
+                  ],
+                );
+              }),
+              if (_isFetchingMore)  // Si se esta cargando mas viajes, se muestra un spinner de carga al final de la lista
+                const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: CircularProgressIndicator())),
             ],
-          );
-        }),
-        if (_isFetchingMore) // Si se esta cargando mas viajes, se muestra un spinner de carga al final de la lista
-          const Padding(padding: EdgeInsets.symmetric(vertical: 20), child: Center(child: CircularProgressIndicator())),
+          ),
+        ),
+        if (_isSelecting)
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              boxShadow: [
+                BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, -2)),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _selectedIds.isEmpty ? null : _shareSelected,
+                    icon: const Icon(Icons.share),
+                    label: const Text("Compartir"),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _selectedIds.isEmpty ? null : _deleteSelected,
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                    icon: const Icon(Icons.delete),
+                    label: const Text("Eliminar"),
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
@@ -212,9 +364,15 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
     final diaMes = salida.day.toString();
     final horaSalida = "${salida.hour.toString().padLeft(2, '0')}:${salida.minute.toString().padLeft(2, '0')}";
     final horaLlegada = "${llegada.hour.toString().padLeft(2, '0')}:${llegada.minute.toString().padLeft(2, '0')}";
+    final bool isSelected = _selectedIds.contains(item.requestId);
 
     return GestureDetector( // Al pulsar sobre la tarjeta, se va a la pantalla de los detalles de la solicitud
-      onTap: () async { 
+      onLongPress: _isSelecting ? null : () => _enterSelectionMode(item),
+      onTap: () async {
+        if (_isSelecting) {
+          _toggleSelection(item);
+          return;
+        }
         final bool? shouldRefresh = await Navigator.push(
           context,
           MaterialPageRoute(
@@ -222,90 +380,93 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
               travel: t, 
               requestId: item.requestId,
               status: item.status,
+              code: item.code,
             ),
           ),
         );
-
-        if (shouldRefresh == true && mounted) { // Si se indica que hay que refrescar los datos, se vuielven a cargar los datos iniciales
-          _fetchInitialData(); 
-        }
+        if (shouldRefresh == true && mounted) _fetchInitialData();
       },
       child: Card( // Se van creando las tarjetas con los datos de cada uno de los viajes
         margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         elevation: 3,
+        color: isSelected ? AppColors.primary.withValues(alpha: 0.08) : null,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
+          padding: EdgeInsets.fromLTRB(_isSelecting ? 4 : 14, 14, 14, 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  Column(// Se meustra la informacion basica del viaje
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [  // Se muestra la fecha del viaje
-                      Text(diaSemana[0].toUpperCase() + diaSemana.substring(1), style: const TextStyle(fontSize: 14, color: Colors.grey)),
-                      Text(diaMes, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              if (_isSelecting)
+                Checkbox(
+                  value: isSelected,
+                  onChanged: (_) => _toggleSelection(item),
+                  activeColor: AppColors.primary,
+                ),
+              Expanded(
+                child: Column(
+                  children: [
+                    Row(
                       children: [
-                        Row(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded( // Se muestra el origen
-                              child: Text(
-                                t.origin, 
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(horaSalida, style: const TextStyle(color: Colors.grey)),
+                            Text(diaSemana[0].toUpperCase() + diaSemana.substring(1), style: const TextStyle(fontSize: 14, color: Colors.grey)),
+                            Text(diaMes, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        const Icon(Icons.arrow_forward, size: 20),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [ // Se muestra el destino
-                            Expanded(
-                              child: Text(
-                                t.destination, 
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                overflow: TextOverflow.ellipsis,
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      t.origin,
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(horaSalida, style: const TextStyle(color: Colors.grey)),
+                                ],
                               ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(horaLlegada, style: const TextStyle(color: Colors.grey)),
-                          ],
+                              const SizedBox(height: 4),
+                              const Icon(Icons.arrow_forward, size: 20),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      t.destination,
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(horaLlegada, style: const TextStyle(color: Colors.grey)),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Divider(),
-              const SizedBox(height: 8),
-              
-              SizedBox(
-                width: double.infinity, // Hace que el Wrap ocupe todo el ancho
-                child: Wrap(
-                  alignment: WrapAlignment.spaceBetween, // Los separa a los extremos (como hacía el Row antiguo)
-                  spacing: 8.0, 
-                  runSpacing: 4.0, 
-                  children: [
-                    Chip( // Se muestra la etiqueta del coche, si tiene
-                      label: Text("Etiqueta: ${t.vehicle.envSticker?.label ?? "-"}"), 
-                      backgroundColor: Colors.green.shade100, // Fondo verde claro
-                      side: BorderSide.none, // Quita el borde gris por defecto
-                    ),
-                    Chip( // Se muestra el rol del conductor
-                      label: Text("Rol: ${t.driver.role.label}"), 
-                      backgroundColor: Colors.blue.shade100, // Fondo azul claro
-                      side: BorderSide.none, // Quita el borde gris por defecto
+                    const SizedBox(height: 12),
+                    const Divider(),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        EnvStickerBadge(sticker: t.vehicle.envSticker, size: 32, showEmpty: true),
+                        const Spacer(),
+                        Text(
+                          "@${t.driver.username}",
+                          style: const TextStyle(fontSize: 13, color: Colors.grey),
+                        ),
+                        const SizedBox(width: 8),
+                        if (item.status != null) _buildStatusChip(item.status!),
+                      ],
                     ),
                   ],
                 ),
@@ -314,6 +475,24 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
           ),
         ),
       ),
+    );
+  }
+
+  // Widget para construir el chip que indica el estado de la solicitud
+  Widget _buildStatusChip(RequestStatus status) {
+    final (String label, Color bg) = switch (status) {
+      RequestStatus.pending => ("Pendiente", Colors.orange.shade100),
+      RequestStatus.accepted => ("Aceptado", Colors.green.shade100),
+      RequestStatus.rejected => ("Rechazado", Colors.red.shade100),
+      RequestStatus.validated => ("Finalizado", Colors.blue.shade100),
+      RequestStatus.unvalidated => ("Finalizado", Colors.grey.shade200),
+    };
+    return Chip(
+      label: Text(label, style: const TextStyle(fontSize: 12, color: Colors.black87)),
+      backgroundColor: bg,
+      side: BorderSide.none,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
     );
   }
 }
