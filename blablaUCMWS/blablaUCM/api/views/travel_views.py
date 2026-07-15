@@ -30,6 +30,9 @@ from django.utils.timezone import make_aware, is_naive
 from django.db import transaction
 from django.db.models import Q, F, Min, Max
 from datetime import datetime, timedelta
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
+from chats.models import Chat
 import string
 import random
 from django.utils.dateparse import parse_datetime, parse_date
@@ -37,7 +40,26 @@ from api.soft_delete import SoftDeleteQuerysetMixin
 from api.errors import ErrorCodes
 
 # Logger para ir almacenando los logs
-logger = logging.getLogger(__name__) 
+logger = logging.getLogger(__name__)
+
+# Cierra la conexion WebSocket del chat de un usuario al que se acaba de expulsar del viaje
+def _notify_chat_removed(travel, user):
+    logger.info(f"Notifying user {user.username} about removal from chat of travel {travel.id_travel}")
+    try:
+        channel_layer = get_channel_layer() # Se obtiene el canal para enviar los mensajes del websocket
+        if channel_layer is None: # Si no existe, no se hace nada
+            return
+        chat = Chat.get_or_create_for_travel(travel)
+        async_to_sync(channel_layer.group_send)( # Se envia un mensaje indicando que el usuario ha sido expulsado del chat
+            f"chat_{chat.id}_user_{user.id}",
+            {
+                'type': 'chat.removed',
+                'message': 'El creador del viaje te ha eliminado, ya no tienes acceso a este chat.',
+            },
+        )
+        logger.info(f"Successfully notified user {user.username} about removal from chat of travel {travel.id_travel}")
+    except Exception as e:
+        logger.error(f"Error occurred while notifying user {user.username} about removal from chat of travel {travel.id_travel}: {str(e)}")
 
 # Endpoint para los estados de los viajes
 class TravelStatesViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
@@ -206,7 +228,7 @@ class TravelViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
             travels = self.get_queryset().exclude(creation_user=request.user).exclude(remaining_seats__lt=1).filter(state='active')
 
             if has_origin and has_dest:
-                # Se anota el orden
+                # Anotamos el orden usando los radios
                 travels = travels.annotate(
                     min_orig_stop_order=Min(
                         'pickup_points__order_in_travel',
@@ -852,6 +874,8 @@ class TravelViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
             logger.info(f"Requesting details for travel {travel.id_travel}")
             want_travels = request.query_params.get("future_travels", "false").lower() == "true"
             user = travel.creation_user
+            
+            is_finished = travel.state.code == 'fnd'
 
             try:
                 # Las valoraciones se obtienen mediante un stored procedure
@@ -865,8 +889,12 @@ class TravelViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
                 pickup_popints = PickUpPoints.objects.filter(id_travel=travel, is_deleted=False).order_by('order_in_travel')
                 pickup_serializer = PickUpPointSerializer(pickup_popints, many=True)
                 preferences = PreferencesSerializer(user.preferences.all(), many=True)
-                # Solo se deben sacar las solicitudes acepatadas o realizadas
-                travel_requests = RequestTravels.objects.filter(id_travel=travel,is_deleted=False, status__code__in=['accepted', 'validated', 'unvalidated']).select_related('user')
+                # Solo se deben sacar las solicitudes acepatadas (no borradas) o realizadas
+                travel_requests = RequestTravels.objects.filter(
+                    Q(status__code='accepted', is_deleted=False) |
+                    Q(status__code__in=['validated', 'unvalidated']),
+                    id_travel=travel
+                ).select_related('user')
                 # Se saca tambien el nombre de usuario de los pasajeros que han sido aceptados
                 passengers_data = [
                     {
@@ -902,6 +930,10 @@ class TravelViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
                     },
                     "pickup_points": pickup_serializer.data,
                     "preferences": [pref["pref_type"] for pref in preferences.data],
+                    "driver": {
+                        "username": user.username,
+                        "profile_picture": user.profile_picture.name.split('/')[-1] if user.profile_picture else None,
+                    },
                     "passengers": passengers_data,
                     "is_requested" : RequestTravels.objects.filter(id_travel=travel.id_travel, user=request.user, status__code__in=['accepted', 'pending', 'validated', 'unvalidated'], is_deleted=False).exists(),
                     "denied_roles": denied_user_types,
@@ -995,10 +1027,14 @@ class TravelViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
                     content=f"Has sido eliminado del viaje {travel.origin} - {travel.destination} del dia {date}."
                 )
                 logger.info(f"Passenger with ID {passenger} removed from travel {travel.id_travel}. Remaining seats updated to {travel.remaining_seats}. Notification sent.")
-                return Response({
-                        "status": "ok",
-                        "message": "Pasajero eliminado del viaje. Asiento liberado."
-                    }, status=status.HTTP_200_OK)
+
+            # Se le notifica que el chat del viaje ha sido eliminado para ese pasajero
+            _notify_chat_removed(travel, passenger)
+
+            return Response({
+                    "status": "ok",
+                    "message": "Pasajero eliminado del viaje. Asiento liberado."
+                }, status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.error(f"Error removing passenger from travel: {str(e)}")
@@ -1039,10 +1075,25 @@ class TravelViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
             request_travel = RequestTravels.objects.get(
                 id_travel=travel,
                 validation_code=code,
-                status__code='accepted',
                 is_deleted=False
             )
-
+            
+            if request_travel.status.code == 'validated':
+                # Si ya esta validado, se informa al usuario que ya ha sido validado
+                logger.warning(f"Passenger {request_travel.user.username} already validated for travel {travel.id_travel}")
+                return Response({
+                    "status": "error",
+                    "message": f"Pasajero {request_travel.user.username} ya ha sido validado.",
+                    "error_code": ErrorCodes.PASSENGER_ALREADY_VALIDATED
+                }, status=status.HTTP_400_BAD_REQUEST)
+            # Si la solicitud no esta aceptada, no se puede validar
+            if request_travel.status.code != 'accepted':
+                logger.warning(f"Passenger {request_travel.user.username} has status {request_travel.status.code} and cannot be validated for travel {travel.id_travel}")
+                return Response({
+                    "status": "error",
+                    "message": f"Pasajero {request_travel.user.username} no está en estado aceptado y no puede ser validado.",
+                    "error_code": ErrorCodes.PASSENGER_NOT_ACCEPTED
+                }, status=status.HTTP_400_BAD_REQUEST)
             # Se actualiza el estado a validado
             validated_state = RequestStates.objects.get(code='validated')
             request_travel.status = validated_state
@@ -1119,6 +1170,21 @@ class TravelViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
                     )
 
                 logger.info(f"Travel {travel.id_travel} finished. {unvalidated_count} passengers marked as unvalidated.")
+                
+                # Se buscan las solicitudes validadas para enviarles la notificacion de que su viaje ha terminado y pueden puntuar al conductor
+                validated_requests = RequestTravels.objects.filter(
+                    id_travel=travel,
+                    status__code='validated',
+                    is_deleted=False
+                )
+                
+                for req in validated_requests:
+                    Notifications.objects.create(
+                        id_user=req.user,
+                        content=f"El viaje {travel.origin} - {travel.destination} ha finalizado. Puedes puntuar al conductor."
+                    )
+                
+                logger.info(f"Notifications sent to {validated_requests.count()} validated passengers for travel {travel.id_travel}.")
 
                 return Response({
                     "status": "ok",
@@ -1200,7 +1266,7 @@ class RequestTravelsViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
                         Notifications.objects.create(
                             id_user=travel.creation_user,
                             content=f"Un pasajero ha cancelado su solicitud para el viaje {travel.origin} - {travel.destination}. Se ha liberado un asiento."
-                        )
+                        )    
         
             self.perform_destroy(instance)
             return Response({
@@ -1219,17 +1285,26 @@ class RequestTravelsViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()
         new_status_code = request.data.get('status')
-
+        
         if new_status_code: # Si se ha cambiado el estado de la solicitud
+            
             try:
+                travel = instance.id_travel
+                
                 with transaction.atomic():
                     current_status = instance.status.code
                     new_status_obj = RequestStates.objects.get(code=new_status_code)
+                    
+                    if request.user != travel.creation_user: # Solo el creador puede aceptar o rechazar una solicitud
+                            logger.warning(f"User {request.user.username} tried to change status of request {instance.id} without proper credentials.")
+                            return Response({
+                                "status": "error",
+                                "message": "No tienes permiso para cambiar el estado de esta solicitud.",
+                                "error_code": ErrorCodes.INSUFICIENT_CREDENTIALS
+                            }, status=status.HTTP_403_FORBIDDEN)
 
                     # En caso de que se apruebe la solicitud
-                    if current_status == 'pending' and new_status_code == 'accepted':
-                        travel = instance.id_travel
-
+                    if current_status == 'pending' and new_status_code == 'accepted':               
                         # Solo se puede aceptar si quedan espacios disponibles
                         if travel.remaining_seats > 0:
                             travel.remaining_seats -= 1
@@ -1255,20 +1330,21 @@ class RequestTravelsViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
 
                     # Si la solicitud estaba aceptada, pero se elimina
                     elif current_status == 'accepted' and new_status_code in ['rejected']:
-                        travel = instance.id_travel
+                        
                         travel.remaining_seats += 1
                         travel.save()
-                        # Se notifica al creador del viaje de que uno de los pasajeros lo ha abandonado
+                        
+                        #Eliminan al pasajero, por lo que se le notifica
                         Notifications.objects.create(
-                            id_user=instance.id_travel.creation_user,
-                            content=f"Un usuario ha abandorado tu viaje {instance.id_travel.origin} - {instance.id_travel.destination}."
+                            id_user=instance.user,
+                            content=f"El creador del viaje {instance.id_travel.origin} - {instance.id_travel.destination} te ha eliminado del viaje."
                         )
                     # Si estaba pendiente y se rechaza
                     elif current_status == 'pending' and new_status_code == 'rejected':
                         # Se notifica al usuario de que le han rechazado la solicitud
                         Notifications.objects.create(
                             id_user=instance.user,
-                            content=f"Tu solicitud para tu viaje {instance.id_travel.origin} - {instance.id_travel.destination} ha sido rechazada."
+                            content=f"Tu solicitud para el viaje {instance.id_travel.origin} - {instance.id_travel.destination} ha sido rechazada."
                         )
 
                     instance.status = new_status_obj

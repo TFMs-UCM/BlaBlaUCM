@@ -4,6 +4,7 @@ from django.db import transaction
 from django.contrib.gis.geos import Point
 from api.serializers.user_serializer import UserSerializer, VehicleSerializer
 from django.utils.dateparse import parse_datetime
+from chats.models import Chat
 
 # Serializer para el modelo Travel
 class TravelSerializer(serializers.ModelSerializer):
@@ -120,6 +121,11 @@ class TravelSerializer(serializers.ModelSerializer):
                     PickUpPoints.objects.bulk_create(child_pickup_points)
                 if child_denied_users:
                     UsersDenied.objects.bulk_create(child_denied_users)
+
+        # Se crea el chat del viaje y el de los hijos
+        Chat.get_or_create_for_travel(travel)
+        for child in Travel.objects.filter(id_origin_travel=travel):
+            Chat.get_or_create_for_travel(child)
 
         return travel
 

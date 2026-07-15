@@ -1,4 +1,3 @@
-import 'package:blablaucm/models/message_model.dart';
 import 'package:blablaucm/models/vehicle_model.dart';
 import 'package:flutter/material.dart';
 import 'package:blablaucm/models/enums.dart';
@@ -20,7 +19,7 @@ class UserModel {
   List<DriverPreferences>? preferences; // Preferencias del usuario
   List<Pair<RatingsTypes, double>>? ratings; // Valoraciones del usuario, cada una con su tipo y su valor
   List<VehicleModel>? vehicles; // Lista de vehiculos del usuario
-  List<AppNotification>? notificationTray; // Bandeja de notificaciones del usuario
+  int unreadNotificationsCount; // Numero de notificaciones no leidas del usuario
 
   UserModel({
     required this.username,
@@ -36,7 +35,7 @@ class UserModel {
     this.ratings,
     this.profPicPath,
     this.vehicles,
-    this.notificationTray,
+    this.unreadNotificationsCount = 0,
     this.has2FA = true
   });
 

@@ -2,8 +2,9 @@ from django.urls import path, include
 from rest_framework import routers
 from api.views.user_views import UsersViewSet, UserTypeViewSet, VehiclesViewSet, \
     NotificationsViewSet, PrefTypesViewSet, PreferencesViewSet, CriteriaViewSet, \
-    DriverRatingsViewSet, EnvTypesViewSet
+    DriverRatingsViewSet, EnvTypesViewSet, DeviceViewSet
 from api.views.travel_views import TravelStatesViewSet, TravelViewSet, RequestStatesViewSet, RequestTravelsViewSet, PickUpPointsViewSet, UsersDeniedViewSet
+from api.views.chat_views import ChatViewSet
 from api.views.media_views import serve_protected_profile_picture
 from api.views.auth_views import CustomTokenRefreshView
 
@@ -19,6 +20,7 @@ userRouter.register(r"criteria", CriteriaViewSet, basename="criteria")
 userRouter.register(r"driverratings", DriverRatingsViewSet, basename="driverratings")
 userRouter.register(r"envtypes", EnvTypesViewSet, basename="envtypes")
 userRouter.register(r"vehicles", VehiclesViewSet, basename="vehicles")
+userRouter.register(r"devices", DeviceViewSet, basename="devices")
 
 travelRouter = routers.DefaultRouter()
 travelRouter.register(r"travelstates", TravelStatesViewSet, basename="travelstates")
@@ -27,6 +29,7 @@ travelRouter.register(r"requeststates", RequestStatesViewSet, basename="requests
 travelRouter.register(r"requesttravel", RequestTravelsViewSet, basename="requesttravel")
 travelRouter.register(r"pickuppoints", PickUpPointsViewSet, basename="pickuppoints")
 travelRouter.register(r"usersdenied", UsersDeniedViewSet, basename="usersdenied")
+travelRouter.register(r"chats", ChatViewSet, basename="chats")
 
 urlpatterns = [
     path('', include(userRouter.urls)),

@@ -35,6 +35,8 @@ CORS_ALLOW_ALL_ORIGINS = True
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
+
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -43,13 +45,15 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     'rest_framework',
+    'channels',
     'corsheaders',
     'django_filters',
     'drf_spectacular',
     'users.apps.UsersConfig',
     'django.contrib.gis',
-    
+
     'travels',
+    'chats',
 ]
 
 MIDDLEWARE = [
@@ -81,6 +85,23 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'blablaUCM.wsgi.application'
+
+ASGI_APPLICATION = 'blablaUCM.asgi.application'
+
+REDIS_URL = config('REDIS_URL', default='')
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [REDIS_URL]},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        }
+    }
 
 
 REST_FRAMEWORK = {

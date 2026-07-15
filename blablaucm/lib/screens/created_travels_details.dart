@@ -351,6 +351,7 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
       message: "¿Estás seguro de que quieres eliminar este viaje?",
       confirmText: "Eliminar",
       confirmColor: Colors.red,
+      barrierDismissible: false,
     );
 
     if (!confirm) return; // Si no acepta, se sale

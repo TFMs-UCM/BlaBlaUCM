@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:blablaucm/services/api_service.dart';
+import 'package:blablaucm/services/google_auth_service.dart';
 import 'package:blablaucm/screens/home.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/screens/register_user_screen.dart';
+import 'package:blablaucm/screens/google_register_screen.dart';
 import 'package:blablaucm/screens/forgot_password_screen.dart';
 import 'package:blablaucm/screens/custom_form_fields.dart';
 import 'package:blablaucm/screens/email_verification.dart';
@@ -22,6 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   bool _obscurePassword = true;
   String? _errorMessage;
 
@@ -76,11 +79,20 @@ class _LoginScreenState extends State<LoginScreen> {
                     : const Text('Entrar'),
               ),
               const SizedBox(height: 16),
-              OutlinedButton.icon(
-                onPressed: () {}, // TODO Implementar el login con google
+              OutlinedButton.icon( // Opcion para iniciar sesion con Google
+                onPressed: _isGoogleLoading ? null : _loginWithGoogle,
                 style: AppButtonStyles.secondary,
-                icon: const Icon(Icons.login, color: Colors.red),
+                icon: _isGoogleLoading
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.login, color: Colors.red),
                 label: const Text('Entrar con Google'),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon( // Opcion para registrarse con Google
+                onPressed: _isGoogleLoading ? null : _registerWithGoogle,
+                style: AppButtonStyles.secondary,
+                icon: const Icon(Icons.person_add, color: Colors.red),
+                label: const Text('Registrarse con Google'),
               ),
               const SizedBox(height: 24),
               GestureDetector( // Si se pulsa sobre el texto crear una cuenta, se abre esa pantalla
@@ -204,6 +216,68 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() {
           _isLoading = false;
         });
+      }
+    }
+  }
+
+  // Funcion para iniciar sesion con Google
+  Future<void> _loginWithGoogle() async {
+    setState(() { _isGoogleLoading = true; _errorMessage = null; });
+    try {
+      // Se intenta iniciar sesion con Google
+      final googleResult = await GoogleAuthService.signIn();
+      if (googleResult == null) return; // El usuario cancelo
+
+      final data = await _apiService.loginWithGoogle(googleResult.idToken);
+
+      if (!mounted) return;
+
+      final code = data?['statusCode'] as int?;
+      if (code == 200) { // Se ha podido obtener el usuario, por lo que se lleva al usuario a la pantalla de Home
+        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomePage()));
+        return;
+      }
+      if (code == 404) { // No tiene cuenta con ese email, por lo que se le avisa
+        setState(() => _errorMessage = 'No tienes cuenta con este email de Google. Usa "Registrarse con Google".');
+        return;
+      }
+      setState(() => _errorMessage = data?['error'] as String? ?? 'Error al iniciar sesión con Google');
+    } 
+    catch (_) { // Si hay una excepcion, se muestra un error de conexion
+      if (mounted) setState(() => _errorMessage = 'Error de conexión');
+    } 
+    finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
+    }
+  }
+
+  // Funcion para realizar el registro del usuario en la app usando Google
+  Future<void> _registerWithGoogle() async {
+    setState(() { _isGoogleLoading = true; _errorMessage = null; });
+    try {
+      final googleResult = await GoogleAuthService.signIn();
+      if (googleResult == null) return; // El usuario cancelo
+
+      if (!mounted) return;
+      Navigator.push( // Se le redigire a la pagina para que se registre con Google
+        context,
+        MaterialPageRoute(
+          builder: (_) => GoogleRegisterScreen(
+            idToken: googleResult.idToken,
+            email: googleResult.email,
+            name: googleResult.name,
+          ),
+        ),
+      );
+    } 
+    catch (_) { // Si hay una excepcion, se muestra un error de conexion
+      if (mounted){
+        setState(() => _errorMessage = 'Error de conexión');
+      }
+    } 
+    finally {
+      if (mounted){
+        setState(() => _isGoogleLoading = false);
       }
     }
   }

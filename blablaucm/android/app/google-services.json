@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "228270723178",
+    "project_id": "blablaucm-b271a",
+    "storage_bucket": "blablaucm-b271a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:228270723178:android:bc1621366c1b02f9107a13",
+        "android_client_info": {
+          "package_name": "com.example.blablaucm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAN4TWI4zZi5xHjRK0nN8VamkNKXErAtJM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

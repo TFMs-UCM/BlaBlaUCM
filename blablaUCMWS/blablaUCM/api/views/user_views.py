@@ -3,10 +3,11 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django_filters.rest_framework import DjangoFilterBackend
-from users.models import Users, UserType, Notifications, PrefTypes, Preferences, Criteria, DriverRatings, EnvTypes, Vehicles
+from users.models import Users, UserType, Notifications, PrefTypes, Preferences, Criteria, DriverRatings, EnvTypes, Vehicles, Device
 from travels.models import RequestTravels, Travel
 from api.serializers.user_serializer import UserTypeSerializer, UserSerializer, NotificationsSerializer, PrefTypesSerializer, \
-    PreferencesSerializer, CriteriaSerializer, DriverRatingsSerializer, EnvTypesSerializer, VehicleSerializer, ProfilePicSerializer
+    PreferencesSerializer, CriteriaSerializer, DriverRatingsSerializer, EnvTypesSerializer, VehicleSerializer, ProfilePicSerializer, \
+    DeviceSerializer
 from api.serializers.travel_serializer import TravelSerializer, RequestTravelsSerializer
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -168,14 +169,16 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
     )
     def get_notifications(self, request, *args, **kwargs):
         """
-        Endpoint GET /users/{id}/notifications/
-        Devuelve todas las notificaciones no borradas del usuario paginadas
+        Endpoint GET /users/{id}/notifications/?ordering=desc|asc
+        Devuelve todas las notificaciones no borradas del usuario paginadas, ordenadas por fecha
         """
         user = self.get_object()
         logger.info(f"Accessed get_notifications endpoint for user ID: {user.id}")
 
         try:
-            qs = user.notifications.filter(is_deleted=False)
+            ordering = request.query_params.get('ordering', 'desc')
+            order_field = 'date' if ordering == 'asc' else '-date'
+            qs = user.notifications.filter(is_deleted=False).order_by(order_field)
             return self.paginated_response(
                 request, qs, NotificationsSerializer,
                 f"Returned notifications for user ID: {user.id}"
@@ -183,6 +186,27 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         except Exception as e:
             logger.error(f"Error in get_notifications: {str(e)}")
             return Response({"error": "Error retrieving notifications", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=500)
+
+    @action(
+        detail=True,
+        methods=['get'],
+        url_path='notifications/unread-count',
+        permission_classes=[IsAuthenticated]
+    )
+    def get_unread_notifications_count(self, request, *args, **kwargs):
+        """
+        Endpoint GET /users/{id}/notifications/unread-count/
+        Devuelve el numero de notificaciones no leidas del usuario
+        """
+        user = self.get_object()
+        logger.info(f"Accessed get_unread_notifications_count endpoint for user ID: {user.id}")
+
+        try:
+            count = user.notifications.filter(is_deleted=False, read=False).count()
+            return Response({"count": count})
+        except Exception as e:
+            logger.error(f"Error in get_unread_notifications_count: {str(e)}")
+            return Response({"error": "Error retrieving unread notifications count", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=500)
 
     @action(
         detail=True,
@@ -237,7 +261,7 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         logger.info(f"Accessed get_preferences endpoint for user ID: {user.id}")
 
         try:
-            qs = user.preferences.filter(is_deleted=False)
+            qs = user.preferences.filter(is_deleted=False).order_by('pref_type')
             return self.paginated_response(
                 request, qs, PreferencesSerializer,
                 f"Returned preferences for user ID: {user.id}"
@@ -639,8 +663,8 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
             logger.error("results and request_travel fields are required in the request body")
             return Response({"error": "results and request_travel fields are required", "error_code": ErrorCodes.MISSING_REQUIRED_FIELD}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Valida que el usuario tiene ese request_travel en estado unvalidated
-        travel = RequestTravels.objects.filter(id=request_travel, user=self.get_object(), status__code='unvalidated').first()
+        # Valida que el usuario tiene ese request_travel en estado validated
+        travel = RequestTravels.objects.filter(id=request_travel, user=self.get_object(), status__code='validated').first()
         if not travel:
             logger.error("The specified request_travel is not found or not in the correct status")
             return Response({"error": "The specified request_travel is not found or not in the correct status", "error_code": ErrorCodes.TRAVEL_DONT_EXIST}, status=status.HTTP_400_BAD_REQUEST)
@@ -661,14 +685,14 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
                         criteria=criteria_obj,
                         score=score
                     )
-                # Se cambia el estado a validado para que ya no se pueda valorar de nuevo ese viaje
-                validated_status = travel.status.__class__.objects.filter(code='validated').first()
-                if validated_status:
-                    travel.status = validated_status
+                # Se cambia el estado a invalidado para que ya no se pueda valorar de nuevo ese viaje
+                unvalidated_status = travel.status.__class__.objects.filter(code='unvalidated').first()
+                if unvalidated_status:
+                    travel.status = unvalidated_status
                     travel.save()
                 else:
-                    logger.error("Validated status not found, unable to update request_travel status.")
-                    return Response({"error": "Validated status not found", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    logger.error("Unvalidated status not found, unable to update request_travel status.")
+                    return Response({"error": "Unvalidated status not found", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
             logger.info(f"Driver ratings saved successfully for user ID: {self.get_object().id} and driver ID: {driver.id}")
             return Response({"status": "OK"}, status=status.HTTP_200_OK)
         except Exception as e:
@@ -776,6 +800,34 @@ class NotificationsViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
     queryset = Notifications.objects.all()
     serializer_class = NotificationsSerializer
     permission_classes = [IsAuthenticated]
+
+# Endpoints para gestionar los dispositivos registrados para notificaciones push
+class DeviceViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
+    queryset = Device.objects.all()
+    serializer_class = DeviceSerializer
+    permission_classes = [IsAuthenticated]
+
+    # Si el dispositivo ya existe, se actualiza, si no, se crea
+    def create(self, request, *args, **kwargs):
+        # coge el token fcm 
+        fcm_token = request.data.get('fcm_token')
+        if not fcm_token: # si no hay token, devuelve un error
+            return Response(
+                {"error": "fcm_token is required", "error_code": ErrorCodes.MISSING_REQUIRED_FIELD},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Actualiza o crea el dispositivo con el token fcm y el usuario actual
+        device, _ = Device.objects.update_or_create(
+            fcm_token=fcm_token,
+            defaults={
+                'id_user': request.user,
+                'platform': request.data.get('platform', ''),
+                'is_deleted': False,
+            }
+        )
+        serializer = self.get_serializer(device)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 # Endpoints para gestionar los tipos de preferencias
 class PrefTypesViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):

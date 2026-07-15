@@ -50,15 +50,74 @@ class _EditPickUpPointsScreenState extends State<EditPickUpPointsScreen> {
   bool isSaving = false;
   bool hasPassengers = false;
 
+  // Lista con los valores iniciales de las paradas para poder detectar cambios sin guardar
+  late final List<String> _initialPointsSignature;
+
+  // Funcion para clonar un punto de recogida, para evitar que se modifiquen los puntos originales si se cancela la edicion
+  PickUpPointModel _clonePoint(PickUpPointModel p) {
+    return PickUpPointModel(
+      id: p.id,
+      name: p.name,
+      date: p.date,
+      lat: p.lat,
+      lng: p.lng,
+      isReached: p.isReached,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     hasPassengers = widget.hasPassengers; // Se carga si tiene pasajeros o no el viaje
-    // Al iniciar, se cargan los puntos iniciales
+    // Al iniciar, se cargan copias de los puntos iniciales, para no modificar los originales si se cancela la edicion
     pickUpPoints = widget.initialPoints
-        .map((p) => Pair<PickUpPointModel, bool>(first: p, second: !hasPassengers)) // Si el viaje tiene pasajeros, no se pueden eliminar las paradas iniciales
+        .map((p) => Pair<PickUpPointModel, bool>(first: _clonePoint(p), second: !hasPassengers)) // Si el viaje tiene pasajeros, no se pueden eliminar las paradas iniciales
         .toList();
-    
+
+    //Se guarda la lista de puntos iniciales 
+    _initialPointsSignature = _pointsSignature();
+  }
+
+  // Funcion para crear una lista con los datos de cada parada (direccion, coordenadas y hora) manteniendo el orden
+  List<String> _pointsSignature() {
+    return pickUpPoints
+        .map((p) => "${p.first.name.trim()}|${p.first.lat}|${p.first.lng}|${p.first.date?.hour}:${p.first.date?.minute}")
+        .toList();
+  }
+
+  // Funcion para comprobar si el usuario ha modificado alguna parada
+  bool get _hasUnsavedChanges {
+    final current = _pointsSignature();
+    if (current.length != _initialPointsSignature.length){
+      return true;
+    }
+    for (int i = 0; i < current.length; i++) {
+      if (current[i] != _initialPointsSignature[i]){
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Funcion para salir de la pantalla, si hay cambios sin guardar se pide confirmacion al usuario
+  Future<void> _handleExit() async {
+    if (isSaving) return;
+
+    bool shouldExit = true;
+    if (_hasUnsavedChanges) {
+      shouldExit = await showConfirmationModal(
+        context,
+        title: "Cambios sin guardar",
+        message: "Tienes cambios sin guardar en las paradas. Si sales ahora se perderán. ¿Seguro que quieres salir?",
+        confirmText: "Salir",
+        cancelText: "Seguir editando",
+        confirmColor: deleteColor,
+      );
+    }
+
+    if (shouldExit && mounted) {
+      Navigator.pop(context);
+    }
   }
 
   // Funcion para añadir una parada
@@ -208,7 +267,14 @@ class _EditPickUpPointsScreenState extends State<EditPickUpPointsScreen> {
   // Funcion para construir la pantalla
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop) return;
+        // Se gestiona la salida para por si hay cambios sin guardar, que el usuario confirme
+        _handleExit();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text("Editar paradas"),
       ),
@@ -456,7 +522,7 @@ class _EditPickUpPointsScreenState extends State<EditPickUpPointsScreen> {
             Expanded(
               child: OutlinedButton(
                 style: AppButtonStyles.secondary,
-                onPressed: isSaving ? null : () => Navigator.pop(context),
+                onPressed: isSaving ? null : _handleExit,
                 child: const Text("Cancelar"), // Boton para cancelar la edicion
               ),
             ),
@@ -476,6 +542,7 @@ class _EditPickUpPointsScreenState extends State<EditPickUpPointsScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

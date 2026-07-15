@@ -64,8 +64,55 @@ class _VehicleDetailsProfileScreenState extends State<VehicleDetailsProfileScree
     seatsCtrl = TextEditingController(text: widget.vehicle.numSeats.toString());
   }
 
+  // Getter para comprobar si el usuario ha modificado algun dato del vehiculo
+  bool get _hasUnsavedChanges {
+    if (!editMode) return false;
+    final v = widget.vehicle;
+    return plateCtrl.text.trim() != v.plate ||
+        brandCtrl.text.trim() != v.brand ||
+        modelCtrl.text.trim() != v.model ||
+        seatsCtrl.text.trim() != v.numSeats.toString() ||
+        localVehicle.color != v.color ||
+        localVehicle.envSticker != v.envSticker;
+  }
+
+  // Funcion para mostrar la modal de confirmacion cuando hay cambios sin guardar
+  Future<bool> _confirmDiscardChanges() {
+    return showConfirmationModal(
+      context,
+      title: "Cambios sin guardar",
+      message: "Tienes cambios sin guardar. Si sales ahora se perderán. ¿Seguro que quieres salir?",
+      confirmText: "Salir",
+      cancelText: "Seguir editando",
+      confirmColor: Colors.red,
+    );
+  }
+
+  // Funcion para salir de la pantalla, si hay cambios sin guardar se pide confirmacion al usuario
+  Future<void> _handleExit() async {
+    if (isSaving) return;
+
+    final bool shouldExit = !_hasUnsavedChanges || await _confirmDiscardChanges();
+
+    if (shouldExit && mounted) {
+      Navigator.pop(context);
+    }
+  }
+
   // Funcion para cancelar la edicion, vuleve a cargar los datos originales del vehiculo y sale del modo edicion
-  void _cancelEdit() {
+  Future<void> _cancelEdit() async {
+    // Si hay cambios, se pide confirmacion antes de descartarlos
+    if (_hasUnsavedChanges) {
+      final bool confirmed = await showConfirmationModal(
+        context,
+        title: "Descartar cambios",
+        message: "Has modificado datos del vehículo. ¿Seguro que quieres descartar los cambios?",
+        confirmText: "Descartar",
+        cancelText: "Seguir editando",
+        confirmColor: Colors.red,
+      );
+      if (!confirmed || !mounted) return;
+    }
     setState(() {
       plateCtrl.text = widget.vehicle.plate;
       brandCtrl.text = widget.vehicle.brand;
@@ -158,10 +205,10 @@ class _VehicleDetailsProfileScreenState extends State<VehicleDetailsProfileScree
       );
       return;
     }
-    // Se asegura que el numero de asientos este entre 1 y 10
-    if (numSeats < 1 || numSeats > 10) {
+    // Se asegura que el numero de asientos este entre 2 y 10
+    if (numSeats < 2 || numSeats > 10) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("El número de asientos debe estar entre 1 y 10."), backgroundColor: Colors.red),
+        const SnackBar(content: Text("El número de asientos debe estar entre 2 y 10."), backgroundColor: Colors.red),
       );
       return;
     }
@@ -313,7 +360,14 @@ class _VehicleDetailsProfileScreenState extends State<VehicleDetailsProfileScree
   // Funcion para construir la pantalla
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop) return;
+        // Se gestiona la salida para por si hay cambios sin guardar, que el usuario confirme
+        _handleExit();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text("Detalles del vehículo"),
       ),
@@ -349,6 +403,7 @@ class _VehicleDetailsProfileScreenState extends State<VehicleDetailsProfileScree
             ),
           ),
         ],
+      ),
       ),
     );
   }

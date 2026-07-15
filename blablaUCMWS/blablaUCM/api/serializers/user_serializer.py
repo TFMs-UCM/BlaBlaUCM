@@ -153,6 +153,13 @@ class NotificationsSerializer(serializers.ModelSerializer):
         # Se incluyen todos los campos ya que no hay informacion sensible
         fields = "__all__"
 
+# Serializer para el modelo Device, que contiene los dispositivos registrados para notificaciones push
+class DeviceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Device
+        fields = "__all__"
+        read_only_fields = ("id_user",)
+
 # Serializer para el modelo PrefTypes, que contiene los tipos de preferencias disponibles
 class PrefTypesSerializer(serializers.ModelSerializer):
     class Meta:

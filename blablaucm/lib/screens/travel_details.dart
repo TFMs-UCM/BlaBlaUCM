@@ -591,11 +591,12 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text( 
+                                const Text(
                                   "Pasajeros del viaje",
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
                                   ),
                                 ),
                                 const SizedBox(height: 2),
@@ -663,6 +664,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                                           style: const TextStyle(
                                             fontSize: 15,
                                             fontWeight: FontWeight.w600,
+                                            color: Colors.black87,
                                           ),
                                           overflow: TextOverflow.ellipsis,
                                         ),

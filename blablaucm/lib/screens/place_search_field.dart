@@ -4,17 +4,17 @@ import 'package:blablaucm/services/route_services/location_service.dart';
 
 // Widget para crear el campo de busqueda de lugares
 
-class PlaceSearchField extends StatelessWidget {
+class PlaceSearchField extends StatefulWidget {
   final TextEditingController controller;
   final String labelText;
   final String? errorText;
   final IconData icon;
   final Color iconColor;
   final LocationService placesService;
-  
+
 
   final Function(Map<String, dynamic> suggestion, Map<String, dynamic>? coords) onPlaceSelected;
-  
+
   final void Function(String)? onChanged;
   final Future<List<Map<String, dynamic>>> Function(String)? suggestionsCallback;
 
@@ -32,34 +32,61 @@ class PlaceSearchField extends StatelessWidget {
   });
 
   @override
+  State<PlaceSearchField> createState() => _PlaceSearchFieldState();
+}
+
+class _PlaceSearchFieldState extends State<PlaceSearchField> {
+
+  String? _confirmedText; // Se guarda el ultimo texto confirmado para no hacer peticiones si no cambia el lugar
+
+  @override
+  void initState() {
+    super.initState();
+    _confirmedText = widget.controller.text.isNotEmpty ? widget.controller.text : null;
+  }
+
+  @override
+  void didUpdateWidget(covariant PlaceSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Si el texto del controller se ha cambiado se actualiza
+    if (oldWidget.controller != widget.controller || oldWidget.controller.text != widget.controller.text) {
+      _confirmedText = widget.controller.text.isNotEmpty ? widget.controller.text : null;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return TypeAheadField<Map<String, dynamic>>(
-      controller: controller,
+      controller: widget.controller,
       emptyBuilder: (context) => const SizedBox.shrink(),
       builder: (context, fieldController, focusNode) => TextField(
         controller: fieldController,
         focusNode: focusNode,
-        onChanged: onChanged,
+        onChanged: widget.onChanged,
         decoration: InputDecoration(
-          labelText: labelText,
-          errorText: errorText,
+          labelText: widget.labelText,
+          errorText: widget.errorText,
         ),
       ),
       debounceDuration: const Duration(milliseconds: 1200), // Se pone por defecto un delay de 1,2 segundos para evitar que se llame mientras se escribe
-      // Usa el callback inyectado o el comportamiento por defecto
-      suggestionsCallback: suggestionsCallback ?? (pattern) async { // Al menos se tienen que poner 3 caracteres para que se haga la peticion
-        if (pattern.length < 3) return [];
-        return await placesService.getAutocomplete(pattern); // Se realiza la llamada al servicio de Google places
+      // Solo se piden sugerencias si el texto ha cambiado respecto al ultimo lugar confirmado y la direccion tiene al menos 3 caracteres
+      suggestionsCallback: (pattern) async {
+        if (pattern.length < 3 || pattern.trim() == (_confirmedText ?? '').trim()) return [];
+        // Si se le ha especificado un callback, se realiza, si no se hace el por defecto
+        return widget.suggestionsCallback != null
+            ? await widget.suggestionsCallback!(pattern)
+            : await widget.placesService.getAutocomplete(pattern); // Se realiza la llamada al servicio de Google places
       },
       itemBuilder: (context, suggestion) => ListTile(
-        leading: Icon(icon, color: iconColor),
+        leading: Icon(widget.icon, color: widget.iconColor),
         title: Text(suggestion['description']),
       ),
       onSelected: (suggestion) async { // Se muestran los lugares que se reciben de google places
-        controller.text = suggestion['description'];
+        widget.controller.text = suggestion['description'];
+        _confirmedText = suggestion['description'];
         // Cuyando se selecciona uno, se realiza una llamada a la api, para sacar sus coordenadas
-        final coords = await placesService.getPlaceDetails(suggestion);
-        onPlaceSelected(suggestion, coords);
+        final coords = await widget.placesService.getPlaceDetails(suggestion);
+        widget.onPlaceSelected(suggestion, coords);
       },
     );
   }
