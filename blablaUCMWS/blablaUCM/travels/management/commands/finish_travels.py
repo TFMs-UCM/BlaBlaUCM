@@ -63,7 +63,7 @@ class Command(BaseCommand):
                         )
                     )
                 # Se actualiza el estado de las solicitudes
-                updated_requests_count = requests_to_update.update(status='unvalidated')
+                updated_requests_count = requests_to_update.update(status='validated')
                 
                 # Si hay que enviar notificaciones, se crean en bloque
                 if notifications:
@@ -71,7 +71,7 @@ class Command(BaseCommand):
                     
                 logger.info(
                     f'Success: {updated_travels_count} travels finished, '
-                    f'{updated_requests_count} requests unvalidated, '
+                    f'{updated_requests_count} requests validated, '
                     f'{len(notifications)} notifications sent.'
                 )           
         except Exception as e:

@@ -276,7 +276,11 @@ class _SearchTravelDetailsScreenState extends State<SearchTravelDetailsScreen> {
                 onPressed: _isLoading ? null : _handleRequest,
                 style: AppButtonStyles.primary,
                 child: _isLoading // Si no se esta cargando, se muestra el boton de solicitar plaza, si no un spinner de carga
-                  ? const CircularProgressIndicator(color: Colors.white)
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
                   : const Text("Solicitar viaje"),
               ),
             ),

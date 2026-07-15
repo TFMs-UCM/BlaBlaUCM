@@ -185,10 +185,9 @@ class RouteStepWidget extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
                     child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(
-                          flex: 5,
                           child: PlaceSearchField( // Widget que se encarga de mostar el campo para buscar el lugar
                             controller: pickUpPoint.controller,
                             labelText: "Parada intermedia",
@@ -216,11 +215,11 @@ class RouteStepWidget extends StatelessWidget {
                             },
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        
+                        const SizedBox(width: 8),
+
                         // Seleccion de la hora de paso por la parada
-                        Expanded(
-                          flex: 3,
+                        SizedBox(
+                          width: 96, // Se pone un ancho fijo para que no se corte la fecha
                           child: InkWell(
                             onTap: () async {
                               final TimeOfDay? picked = await showTimePicker(
@@ -243,11 +242,16 @@ class RouteStepWidget extends StatelessWidget {
                             },
                             child: InputDecorator(
                               decoration: const InputDecoration(
-                                labelText: "Hora de paso",
-                                suffixIcon: Icon(Icons.access_time, size: 20),
+                                labelText: "Hora",
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+                                suffixIcon: Icon(Icons.access_time, size: 16),
+                                suffixIconConstraints: BoxConstraints(maxWidth: 28, maxHeight: 20),
                               ),
                               child: Text(
                                 pickUpPoint.date != null ? '${pickUpPoint.date!.hour.toString().padLeft(2, '0')}:${pickUpPoint.date!.minute.toString().padLeft(2, '0')}' : "--:--",
+                                overflow: TextOverflow.visible,
+                                softWrap: false,
                                 style: TextStyle(
                                   color: pickUpPoint.date != null ? Theme.of(context).textTheme.bodyLarge?.color: Colors.grey,
                                 ),
@@ -255,10 +259,12 @@ class RouteStepWidget extends StatelessWidget {
                             ),
                           ),
                         ),
-                        
+
                         // Boton para eliminar la parada
                         IconButton(
                           icon: const Icon(Icons.remove_circle, color: Colors.red),
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
                           onPressed: () {
                             pickUpPoints.remove(pickUpPoint);
                             onPickUpPointsChanged();
@@ -506,15 +512,21 @@ class TravelDataStepWidget extends StatelessWidget {
                 const Text("Selecciona los roles que NO podrán unirse a este viaje.", style: TextStyle(color: Colors.grey, fontSize: 13)),
                 const SizedBox(height: 10),
                 ...restrictedUserTypes.map((type) => Card(
-                  color: Colors.red.shade50,
+                  color: AppColors.dangerSurface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: AppColors.dangerBorder),
+                  ),
                   child: ListTile(
                     title: DropdownButton<UsersType>(
                       value: type, isExpanded: true, underline: const SizedBox(),
+                      dropdownColor: Colors.white,
+                      style: TextStyle(color: AppColors.light.danger, fontSize: 16),
                       // Se evita que el usuario pueda seleccionar el tipo todos
-                      items: UsersType.values.where((u) => u != UsersType.all && (!restrictedUserTypes.contains(u) || u == type)).map((u) => DropdownMenuItem(value: u, child: Text(u.label))).toList(),
+                      items: UsersType.values.where((u) => u != UsersType.all && (!restrictedUserTypes.contains(u) || u == type)).map((u) => DropdownMenuItem(value: u, child: Text(u.label, style: TextStyle(color: AppColors.light.danger)))).toList(),
                       onChanged: (val) { restrictedUserTypes[restrictedUserTypes.indexOf(type)] = val!; onRestrictionsChanged(); },
                     ),
-                    trailing: IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red), onPressed: () { restrictedUserTypes.remove(type); onRestrictionsChanged(); }),
+                    trailing: IconButton(icon: Icon(Icons.remove_circle, color: AppColors.light.danger), onPressed: () { restrictedUserTypes.remove(type); onRestrictionsChanged(); }),
                   ),
                 )),
                 const SizedBox(height: 12),

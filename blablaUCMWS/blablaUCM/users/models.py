@@ -160,6 +160,35 @@ class Notifications(models.Model):
     def __str__(self):
         return self.content
     
+# Modelo para los dispositivos de los usuarios, usado para enviar notificaciones push via FCM
+class Device(models.Model):
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        db_column='id'
+    )
+    fcm_token = models.CharField(max_length=255, unique=True)
+    platform = models.CharField(max_length=20)
+
+    is_deleted = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    id_user = models.ForeignKey(
+        'Users',
+        on_delete=models.CASCADE,
+        db_column='id_user',
+        related_name='devices'
+    )
+
+    class Meta:
+        db_table = 'devices'
+
+    def __str__(self):
+        return f"{self.platform} device of {self.id_user}"
+
 # Modelo para los tipos de preferencias
 class PrefTypes(models.Model):
     id_pref = models.AutoField(

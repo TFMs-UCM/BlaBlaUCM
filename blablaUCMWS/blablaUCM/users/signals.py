@@ -1,7 +1,8 @@
 import os
-from django.db.models.signals import pre_save, post_delete
+from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
-from .models import Users
+from .models import Users, Notifications
+from services.push.push_service import PushNotification
 
 
 # Delete the old picture when it actualizes
@@ -29,3 +30,18 @@ def delete_profile_pic_on_delete(sender, instance, **kwargs):
 
     if file and os.path.isfile(file.path):
         os.remove(file.path)
+
+
+# Envia una notificacion push al usuario cada vez que se crea una Notifications en bbdd
+@receiver(post_save, sender=Notifications)
+def send_push_on_notification_created(sender, instance, created, **kwargs):
+    if not created:
+        return
+
+    PushNotification.send_to_user(
+        user=instance.id_user,
+        title="BlaBlaUCM",
+        body=instance.content,
+        notification_type="notification",
+        data={"notification_id": str(instance.id)},
+    )

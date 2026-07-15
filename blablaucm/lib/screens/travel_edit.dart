@@ -109,10 +109,51 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
     selectedTravelType = widget.travel.isPeriodic ? TravelType.periodic : TravelType.punctual;
     periodicDaysCtrl = TextEditingController(text: widget.travel.periodicInterval?.toString() ?? "");
     endPeriodicDate = widget.travel.endPeriodicDate;
-    restrictedUserTypes = widget.travel.deniedRoles ?? [];
+    // Se copia la lista para no modificar la del viaje original hasta que se guarde
+    restrictedUserTypes = List.of(widget.travel.deniedRoles ?? []);
     onlyThisTravel = true; // Por defecto se deja que sea solo para ese viaje
     periodicRemoveDate = null;
     hasPassengers = widget.numPassengers > 0;
+  }
+
+  // Comprueba si el usuario ha modificado algun dato
+  bool get _hasUnsavedChanges {
+    final travel = widget.travel;
+    final initialDenied = (travel.deniedRoles ?? []).toSet();
+    final currentDenied = restrictedUserTypes.toSet();
+
+    return originCtrl.text.trim() != travel.origin ||
+        destinationCtrl.text.trim() != travel.destination ||
+        currentSeats != travel.numSeats ||
+        durationCtrl.text.trim() != travel.duration.toString() ||
+        selectedDate != travel.startDate ||
+        vehicle.id != travel.vehicle.id ||
+        selectedTravelType != (travel.isPeriodic ? TravelType.periodic : TravelType.punctual) ||
+        periodicDaysCtrl.text != (travel.periodicInterval?.toString() ?? "") ||
+        endPeriodicDate != travel.endPeriodicDate ||
+        currentDenied.length != initialDenied.length ||
+        !currentDenied.containsAll(initialDenied);
+  }
+
+  // Funcion para la salir de la pantalla, si hay cambios sin guardar se pide confirmacion al usuario
+  Future<void> _handleExit() async {
+    if (isSaving) return;
+
+    bool shouldExit = true;
+    if (_hasUnsavedChanges) {
+      shouldExit = await showConfirmationModal(
+        context,
+        title: "Cambios sin guardar",
+        message: "Tienes cambios sin guardar. Si sales ahora se perderán. ¿Seguro que quieres salir?",
+        confirmText: "Salir",
+        cancelText: "Seguir editando",
+        confirmColor: errorColor,
+      );
+    }
+
+    if (shouldExit && mounted) {
+      Navigator.pop(context);
+    }
   }
 
   @override
@@ -368,7 +409,14 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
   // Funcion para construir la pantalla
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop) return;
+        // Se gestiona la salida para por si hay cambios sin guardar, que el usuario confirme
+        _handleExit();
+      },
+      child: Scaffold(
       backgroundColor: bgColor,
       appBar: AppBar(
         backgroundColor: cardColor,
@@ -409,13 +457,14 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
                     style: AppButtonStyles.danger.copyWith(
                       minimumSize: const WidgetStatePropertyAll(Size(double.infinity, 54)),
                     ),
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: _handleExit,
                     child: const Text("Cancelar"),
                   ),
                   const SizedBox(height: 40),
                 ],
               ),
             ),
+      ),
     );
   }
 

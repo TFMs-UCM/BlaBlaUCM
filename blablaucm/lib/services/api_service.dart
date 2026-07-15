@@ -72,6 +72,54 @@ class ApiService {
     }
   }
 
+  // Funcion para realizar el login con Google, envia el id_token al backend y guarda los JWT si el usuario ya existe
+  Future<Map<String, dynamic>?> loginWithGoogle(String idToken) async {
+    // Se construye la url
+    final endpoint = dotenv.env['GOOGLE_AUTH_LOGIN_ENDPOINT'] ?? '/auth/google/login/';
+    final url = Uri.parse(baseUrl + endpoint);
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'id_token': idToken}),
+    );
+    if (response.body.isEmpty) return null;
+    final data = jsonDecode(response.body);
+    // Si la respuesta es correcta, se guardan los tokens y el id del usuario
+    if (response.statusCode == 200 && data['access'] != null) {
+      await _storage.saveElement('access_token', data['access']);
+      await _storage.saveElement('refresh_token', data['refresh']);
+      await _storage.saveElement('user_id', data['user']['id']);
+    }
+    return {'statusCode': response.statusCode, ...data};
+  }
+
+  // Funcion para realizar el registro con Google
+  Future<Map<String, dynamic>?> registerWithGoogle({required String idToken, required String username, required String userType, String? surname2}) async {
+    // Se construye la url
+    final endpoint = dotenv.env['GOOGLE_AUTH_REGISTER_ENDPOINT'] ?? '/auth/google/register/';
+    final url = Uri.parse(baseUrl + endpoint);
+    // Se envian los datos del usuario junto con el token_id para validarlo y crear al usuario
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'id_token': idToken,
+        'username': username,
+        'user_type': userType,
+        if (surname2 != null && surname2.isNotEmpty) 'surname2': surname2,
+      }),
+    );
+    if (response.body.isEmpty) return null;
+    final data = jsonDecode(response.body);
+    // Si la respuesta es correcta, se guardan los tokens y el id del usuario
+    if (response.statusCode == 200 && data['access'] != null) {
+      await _storage.saveElement('access_token', data['access']);
+      await _storage.saveElement('refresh_token', data['refresh']);
+      await _storage.saveElement('user_id', data['user']['id']);
+    }
+    return {'statusCode': response.statusCode, ...data};
+  }
+
   // Funcion general para ralizar cualquier peticion a la api, se le pasa el endpoint, si requiere autenticacion, los queryparams, el metodo (get, patch...) y el body
   Future<Map<String, dynamic>?> requestToApi(String endpoint, {bool requireAuthentication = true, Map<String, String>? queryParams, ApiOptions op = ApiOptions.get, Map<String, dynamic>? body}) async {
     // Se construye la url completa con la url base, si la url que se le pasa ya tiene http es porque no es necesario añadir la url base

@@ -633,6 +633,7 @@ class TravelExtraData {
   final int numRatings;
   final List<DriverPreferences> preferences;
   final List<PickUpPointModel> pickUpPoints;
+  final Pair<String, String?>? driver; // conductor del viaje (nombre y ruta a su foto de perfil)
   final List<Pair<String, String?>> passengers;
   final bool isRequested;
   final List<FutureTravelExtraData>? futureTravels; // Viajes futuros asociados
@@ -651,6 +652,7 @@ class TravelExtraData {
     required this.passengers,
     required this.isRequested,
     required this.deniedRoles,
+    this.driver,
     this.originLat,
     this.originLng,
     this.destLat,
@@ -751,6 +753,12 @@ Future<TravelExtraData> fetchTravelExtraData({required String travelId, required
             .whereType<UsersType>()
             .toList() ?? [];
 
+    // Parseo del conductor del viaje (nombre y foto de perfil)
+    final driverRaw = response['driver'] as Map<String, dynamic>?;
+    final Pair<String, String?>? driver = (driverRaw != null && driverRaw['username'] != null)
+        ? Pair<String, String?>(first: driverRaw['username'] as String, second: driverRaw['profile_picture'] as String?)
+        : null;
+
     // Parseo de coordenadas del origen y destino
     final double? originLat = (response['origin_lat'] as num?)?.toDouble();
     final double? originLng = (response['origin_lng'] as num?)?.toDouble();
@@ -763,6 +771,7 @@ Future<TravelExtraData> fetchTravelExtraData({required String travelId, required
       numRatings: numRatings,
       preferences: preferences,
       pickUpPoints: pickUpPoints,
+      driver: driver,
       passengers: passengersData,
       isRequested: isRequested,
       futureTravels: futureTravels,

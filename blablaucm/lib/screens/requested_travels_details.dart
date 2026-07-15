@@ -107,7 +107,7 @@ class _RequestedTravelsDetailsScreenState extends State<RequestedTravelsDetailsS
                     ),
                   ),
 
-                if (widget.status == RequestStatus.unvalidated) // Si no esta validado, se puede valorar al conductor
+                if (widget.status == RequestStatus.validated) // Si esta validado, se puede valorar al conductor
                   Padding( // Se añade un boton para puntuar al conductor
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                     child: SizedBox(
@@ -255,24 +255,14 @@ class _RequestedTravelsDetailsScreenState extends State<RequestedTravelsDetailsS
       setState(() => _isLoading = false);
 
       if (response != null && response['error'] == null) { // Si se ha registrado bien la valoracion, se muestra un mensaje de exito
-        await showDialog(
-          context: context,
+        showModal(
+          context,
+          "Gracias, la valoración se ha registrado correctamente.",
+          title: "Valoración enviada",
+          type: AlertType.success,
           barrierDismissible: false,
-          builder: (dialogContext) {
-            return AlertDialog(
-              title: const Text("Valoración enviada"),
-              content: const Text("Gracias, la valoración se ha registrado correctamente."),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(dialogContext);
-                    Navigator.pop(context, true);
-                  },
-                  child: const Text("Aceptar"),
-                ),
-              ],
-            );
-          },
+          backPage: true,
+          returnValue: true,
         );
       } 
       else { // Si ha habido un error, se muestra el error
@@ -313,8 +303,7 @@ class _RequestedTravelsDetailsScreenState extends State<RequestedTravelsDetailsS
       // Se realiza la peticion a la api
       final response = await api.requestToApi(
         requestEndpoint,
-        op: ApiOptions.patch, 
-        body: {"status": RequestStatus.rejected.name},
+        op: ApiOptions.delete,
       );
 
       if (!mounted) return;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/services/api_service.dart';
 import 'package:blablaucm/models/enums.dart';
+import 'package:blablaucm/theme/app_colors.dart';
 
 // Clase para unificar la logica de la verificacion del 2FA
 
@@ -161,11 +162,11 @@ class EmailVerification {
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 2.0),
                           child: TextField(
-                            controller: controllers[index], 
+                            controller: controllers[index],
                             focusNode: focusNodes[index],
                             enabled: !isSending && !isLoading,
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            textAlign: TextAlign.center, 
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.of(innerContext).textPrimary),
+                            textAlign: TextAlign.center,
                             maxLength: 1, // Solo se permite un unico caracter por campo
                             keyboardType: TextInputType.text,
                             decoration: const InputDecoration(

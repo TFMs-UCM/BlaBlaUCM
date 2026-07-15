@@ -1,5 +1,6 @@
+import 'dart:async';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:blablaucm/models/enums.dart';
-import 'package:blablaucm/models/message_model.dart';
 import 'package:blablaucm/models/user_model.dart';
 import 'package:blablaucm/screens/create_travel.dart';
 import 'package:blablaucm/screens/my_travels.dart';
@@ -9,6 +10,7 @@ import 'package:blablaucm/screens/chats.dart';
 import 'package:blablaucm/screens/profile.dart';
 import 'package:blablaucm/screens/notification_tray.dart';
 import 'package:blablaucm/services/api_service.dart';
+import 'package:blablaucm/services/push_notification_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/providers/storage_provider.dart';
 import 'package:blablaucm/models/pair.dart';
@@ -38,6 +40,23 @@ class _HomePageState extends State<HomePage> with RouteAware {
   String? _userError;
   final SecureStorageService _storage = SecureStorageService();
   ApiService apiService = ApiService();
+  StreamSubscription<RemoteMessage>? _foregroundMessageSub;
+
+  // Funcion para actualizar el numero de notificaciones no leidas, se usa al recibir un
+  // push en primer plano y al volver a esta pantalla, solo se actualiza el contador
+  Future<void> _refreshUnreadNotificationsCount() async {
+    if (user == null) return;
+    // Se construye la url
+    final endpoint = "${dotenv.env['USER_ENDPOINT'] ?? '/users/'}${await _storage.getElement('user_id')}"
+        "${dotenv.env['UNREAD_NOTIFICATION_ENDPOINT'] ?? '/notifications/'}";
+    // Se realiza la peticion a la api 
+    final json = await apiService.requestToApi(endpoint);
+    if (json == null) return;
+
+    if (mounted) {
+      setState(() => user!.unreadNotificationsCount = (json['count'] as num?)?.toInt() ?? 0);
+    }
+  }
 
   // Funcion para cargar el usuario, con sus notifiaciones, preferencias y valoraciones
   Future<void> _loadUser() async {
@@ -57,24 +76,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
         if ((user?.profPicPath ?? '').isNotEmpty) { // Cargar la foto de perfil
           user!.profilePicture = await apiService.getProfilePicture(user!.profPicPath!);
         }
-        if (user?.notificationTray == null) { // Cargar las notificaciones 
-          String notificationsEndpoint =
-              dotenv.env['NOTIFICATIONS_ENDPOINT'] ?? '/notifications/';
-
-          Map<String, dynamic>? json = await apiService.requestToApi("$userEndpoint$notificationsEndpoint");
-          if (json != null) {
-            List<AppNotification> allNotifications = [];
-
-            while (json != null) { // Carga las notificaciones
-              allNotifications.addAll(AppNotification.loadNotificationTray(json));
-              String? nextUrl = json['next'];
-              if (nextUrl == null || nextUrl.isEmpty) break;
-              json = await apiService.requestToApi(nextUrl);
-            }
-
-            user!.notificationTray = allNotifications;
-          }
-        }
+        await _refreshUnreadNotificationsCount(); // Cargar el numero de notificaciones no leidas
         if ((user?.preferences == null || user!.preferences!.isEmpty)) { // Cargar las preferencias
           String preferencesEndpoint = dotenv.env['PREFERENCES_ENDPOINT'] ?? '/notifications/';
           Map<String, dynamic>? json = await apiService.requestToApi("$userEndpoint$preferencesEndpoint");
@@ -134,6 +136,13 @@ class _HomePageState extends State<HomePage> with RouteAware {
     super.initState();
     _loadUser();
     _loadNextTravel();
+    PushNotificationService.initialize(); // Registra el token push del dispositivo tras iniciar sesion
+    // Si llega un push de tipo notificacion con la app abierta, se refresca la bandeja
+    _foregroundMessageSub = PushNotificationService.onForegroundMessage.listen((message) {
+      if (message.data['type'] == 'notification') {
+        _refreshUnreadNotificationsCount();
+      }
+    });
     _tabs = [
       const SearchTravelPage(),
       const MyTravelsScreen(),
@@ -172,6 +181,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
   @override
   void dispose() {
     RouteObserver<ModalRoute<void>>().unsubscribe(this);
+    _foregroundMessageSub?.cancel();
     super.dispose();
   }
 
@@ -179,12 +189,9 @@ class _HomePageState extends State<HomePage> with RouteAware {
   @override
   void didPopNext() {
     setState(() {
-      //_selectedIndex = 0; 
-
-      //_loadUser(); 
       _loadNextTravel();
-      // TODO Se podria hacer un refresco de las notificaciones
     });
+    _refreshUnreadNotificationsCount(); // Se refresca el numero de notificaciones
   }
 
   // Funciuon para construir la pantalla
@@ -239,8 +246,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                   );
                 },
               ),
-              if (user!.notificationTray != null &&
-                  user!.notificationTray!.whereType<AppNotification>().any((n) => !n.isRead))
+              if (user!.unreadNotificationsCount > 0)
                 Positioned(
                   right: 2,
                   top: 2,
@@ -252,7 +258,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
                           builder: (context) => NotificationTrayScreen(user: user!),
                         ),
                       );
-                    }, 
+                    },
                     child: Container(
                       alignment: Alignment.center,
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -264,12 +270,8 @@ class _HomePageState extends State<HomePage> with RouteAware {
                         minWidth: 18,
                         minHeight: 18,
                       ),
-                      child: Text(
-                        user!.notificationTray!
-                            .whereType<AppNotification>()
-                            .where((n) => !n.isRead)
-                            .length
-                            .toString(),
+                      child: Text( // Si hay muchas +99 solo se pone 99+
+                        user!.unreadNotificationsCount > 99 ? "99+" : user!.unreadNotificationsCount.toString(),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
@@ -287,7 +289,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       body: _selectedIndex == 0
           ? _PendingTripsCard(
               travels: _nextTravels,
-              onGoToMyTrips: () => setState(() => _selectedIndex = 2),
+              onGoToSearch: () => setState(() => _selectedIndex = 1),
             )
           : _tabs[_selectedIndex - 1],
       floatingActionButton: _selectedIndex == 0
@@ -337,11 +339,11 @@ class _HomePageState extends State<HomePage> with RouteAware {
 
 // Widget para mostrar el card con los 3 proximos viajes 
 class _PendingTripsCard extends StatelessWidget {
-  final VoidCallback onGoToMyTrips;
+  final VoidCallback onGoToSearch;
   final List<_NextTravelEntry> travels;
 
   const _PendingTripsCard({
-    required this.onGoToMyTrips,
+    required this.onGoToSearch,
     required this.travels,
   });
 
@@ -399,7 +401,7 @@ class _PendingTripsCard extends StatelessWidget {
             ),
             const SizedBox(height: 28),
             FilledButton.icon(
-              onPressed: onGoToMyTrips,
+              onPressed: onGoToSearch,
               style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
               icon: const Icon(Icons.search),
               label: const Text("Buscar viaje"),

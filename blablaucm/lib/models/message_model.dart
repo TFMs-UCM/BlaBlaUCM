@@ -1,12 +1,27 @@
 // Clase que representa el modelo de datos de un mensaje
 class MessageModel {
-  final String user; // usuario
+  final String user; // nombre de usuario del emisor 
+  final String? userId; // id del emisor
   final MessageContent content; // Contenido del mensaje
 
   MessageModel({
     required this.user,
+    this.userId,
     required this.content
   });
+
+  // Crea un mensaje a partir del JSON 
+  factory MessageModel.fromJson(Map<String, dynamic> json) {
+    final rawTimestamp = json['timestamp'];
+    return MessageModel(
+      user: json['username'] ?? '',
+      userId: json['user_id']?.toString(),
+      content: MessageContent(
+        content: json['content'] ?? '',
+        timestamp: rawTimestamp != null ? DateTime.parse(rawTimestamp).toLocal() : DateTime.now(),
+      ),
+    );
+  }
 }
 
 class MessageContent{
@@ -47,10 +62,7 @@ class AppNotification extends MessageContent {
   }
   // Funcion para cargar la bandeja de notificaciones a partir de un JSON
   static List<AppNotification> loadNotificationTray(Map<String, dynamic> json) {
-  final results = json['results'] as List? ?? [];
-  return results
-      .map((item) => AppNotification.fromJson(item))
-      .toList();
-}
-
+    final results = json['results'] as List? ?? [];
+    return results.map((item) => AppNotification.fromJson(item)).toList();
+  }
 }

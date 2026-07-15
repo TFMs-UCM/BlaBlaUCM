@@ -34,6 +34,32 @@ class _CreatedVehicleDetailsScreenState extends State<CreatedVehicleDetailsScree
 
   bool isSaving = false;
 
+  // Getter para comprobar si el usuario ha introducido algun dato en el formulario
+  bool get _hasUnsavedChanges =>
+      plateCtrl.text.trim().isNotEmpty || brandCtrl.text.trim().isNotEmpty || modelCtrl.text.trim().isNotEmpty ||
+      seatsCtrl.text.trim().isNotEmpty || envSticker != null || carColor != null;
+
+  // Funcion para salir de la pantalla, si hay datos introducidos se pide confirmacion al usuario
+  Future<void> _handleExit() async {
+    if (isSaving) return;
+
+    bool shouldExit = true;
+    if (_hasUnsavedChanges) {
+      shouldExit = await showConfirmationModal(
+        context,
+        title: "Cambios sin guardar",
+        message: "Tienes datos sin guardar. Si sales ahora se perderán. ¿Seguro que quieres salir?",
+        confirmText: "Salir",
+        cancelText: "Seguir editando",
+        confirmColor: Colors.red,
+      );
+    }
+
+    if (shouldExit && mounted) {
+      Navigator.pop(context);
+    }
+  }
+
   // Funcion para mostrar un mensaje de error en la parte inferior de la pantalla
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
@@ -127,7 +153,14 @@ class _CreatedVehicleDetailsScreenState extends State<CreatedVehicleDetailsScree
   // FUncion para crear la pantalla
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop) return;
+        // Se gestiona la salida para por si hay cambios sin guardar, que el usuario confirme
+        _handleExit();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Text("Nuevo vehículo"),
       ),
@@ -230,7 +263,7 @@ class _CreatedVehicleDetailsScreenState extends State<CreatedVehicleDetailsScree
                               children: [
                                 Expanded(
                                   child: ElevatedButton( // Boton de cancelar
-                                    onPressed: () => Navigator.pop(context),
+                                    onPressed: _handleExit,
                                     style: AppButtonStyles.secondary,
                                     child: const Text("Cancelar"),
                                   ),
@@ -252,6 +285,7 @@ class _CreatedVehicleDetailsScreenState extends State<CreatedVehicleDetailsScree
             ),
           ),
         ),
+      ),
       ),
     );
   }

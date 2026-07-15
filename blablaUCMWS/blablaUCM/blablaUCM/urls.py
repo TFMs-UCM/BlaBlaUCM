@@ -16,7 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from api.views.auth_views import CustomTokenObtainPairView, register_view, CustomTokenRefreshView
+from api.views.auth_views import CustomTokenObtainPairView, register_view, CustomTokenRefreshView, google_login_view, google_register_view
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from django.conf import settings
 from django.conf.urls.static import static
@@ -31,6 +31,8 @@ urlpatterns = [
     path('api/v1/login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/register/', register_view, name='register'),
     path('api/v1/auth/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
+    path('api/v1/auth/google/login/', google_login_view, name='google_login'),
+    path('api/v1/auth/google/register/', google_register_view, name='google_register'),
 
     # Esquema y docs
     path('api/v1/schema/', SpectacularAPIView.as_view(), name='schema'),

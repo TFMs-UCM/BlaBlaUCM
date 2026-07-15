@@ -44,9 +44,6 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
 
   String? errorMessage;
 
-  String? origin;
-  String? destination;
-
   @override
   void initState() {
     // Al cargar la pantalla, se inicializan las variables
@@ -114,8 +111,6 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
       originLng = destLng;
       destLat = tmpLat;
       destLng = tmpLng;
-      origin = _originController.text;
-      destination = _destinationController.text;
     });
   }
 
@@ -183,17 +178,11 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
                                   errorText: errorMessage != null && _originController.text.isEmpty ? "Campo obligatorio" : null,
                                   iconColor: Colors.blue,
                                   placesService: placesService,
-                                  // Solo se llama a la api si el texto ha cambiado respecto al ultimo lugar confirmado (seleccionado o intercambiado)
-                                  suggestionsCallback: (pattern) async {
-                                    if (pattern.length < 3 || pattern.trim() == (origin ?? '').trim()) return [];
-                                    return await placesService.getAutocomplete(pattern);
-                                  },
                                   onPlaceSelected: (suggestion, coords) {
                                     if (coords != null) {
                                       setState(() {
                                         originLat = coords['lat'];
                                         originLng = coords['lng'];
-                                        origin = _originController.text; // Se guarda el lugar confirmado
                                         errorMessage = null;
                                       });
                                     }
@@ -209,17 +198,11 @@ class _SearchTravelPageState extends State<SearchTravelPage> {
                                   errorText: errorMessage != null && _destinationController.text.isEmpty ? "Campo obligatorio" : null,
                                   iconColor: Colors.red,
                                   placesService: placesService,
-                                  // Solo se llama a la api si el texto ha cambiado respecto al ultimo lugar confirmado (seleccionado o intercambiado)
-                                  suggestionsCallback: (pattern) async {
-                                    if (pattern.length < 3 || pattern.trim() == (destination ?? '').trim()) return [];
-                                    return await placesService.getAutocomplete(pattern);
-                                  },
                                   onPlaceSelected: (suggestion, coords) {
                                     if (coords != null) {
                                       setState(() {
                                         destLat = coords['lat'];
                                         destLng = coords['lng'];
-                                        destination = _destinationController.text; // Se guarda el lugar confirmado
                                         errorMessage = null;
                                       });
                                     }

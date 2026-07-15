@@ -11,6 +11,7 @@ import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/services/api_service.dart';
 import 'package:blablaucm/services/route_services/ors_routing_service.dart';
 import 'package:blablaucm/screens/helper.dart';
+import 'package:blablaucm/theme/app_colors.dart';
 
 // Pantalla de navegacion que muestra la ruta del viaje con instrucciones
 
@@ -436,12 +437,13 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
                   // Campo para introducir el codigo manualmente
                   TextField(
                     controller: codeController,
+                    style: TextStyle(color: AppColors.of(context).textPrimary),
                     decoration: InputDecoration(
                       labelText: 'Código de validación',
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       prefixIcon: const Icon(Icons.confirmation_number),
                       filled: true,
-                      fillColor: const Color(0xFFF9FAFB),
+                      fillColor: AppColors.of(context).surfaceLow,
                     ),
                     textCapitalization: TextCapitalization.characters,
                   ),
