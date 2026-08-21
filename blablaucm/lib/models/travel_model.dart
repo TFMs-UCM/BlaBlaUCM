@@ -20,7 +20,6 @@ class TravelModel {
   int? periodicInterval; // Dias tras los que se repite el viaje
   TravelStatus status; // estado del viaje
   VehicleModel vehicle; // vehiculo
-  //ChatStatus chatStatus; // estado del chat del viaje (futura implementacion)
   List<UsersType>? deniedRoles; // Lista de tipos de usuario a los que se les deniega el acceso al viaje
   List<Pair<String, String?>>? passengers; // Lista de usuarios que ya han sido aprobados en el viaje
   bool isRequested = false; // Indica si el viaje ha sido solicitado o no
@@ -39,7 +38,6 @@ class TravelModel {
     this.periodicInterval,
     required this.status,
     required this.vehicle,
-    //required this.chatStatus,
     this.deniedRoles,
     this.endPeriodicDate,
     this.passengers,
@@ -55,21 +53,19 @@ class TravelModel {
   factory TravelModel.fromJson(Map<String, dynamic> json) {
     return TravelModel(
       id: json['id_travel'],
-      startDate: DateTime.parse(json['travel_date']),
+      startDate: DateTime.parse(json['travel_date']).toLocal(),
       numSeats: json['num_seats'],
       remainingSeats: json['remaining_seats'],
       isPeriodic: json['is_periodic'],
       vehicle: VehicleModel.fromJson(json['vehicle']),
       status: parseEnum<TravelStatus>(json['state'], TravelStatus.values)!,
-      //chatStatus: parseEnum<ChatStatus>(json['chat_status'], ChatStatus.values)!,
       duration: json['duration_minutes'],
       periodicInterval: json['periodic_interval'],
       driver: UserModel.fromJson(json['creation_user']),
       origin: json['origin'],
       destination: json['destination'],
-      //pickUpPoints: [PickUpPointModel.fromJson(json['pick_up_points'])],
       deniedRoles: json['denied_roles'],
-      endPeriodicDate: json['end_periodic_date'] != null ? DateTime.parse("${json['end_periodic_date']}T00:00:00Z") : null,
+      endPeriodicDate: json['end_periodic_date'] != null ? DateTime.parse("${json['end_periodic_date']}T00:00:00") : null,
       passengers: json['passengers']?.map((p) => Pair<String, String?>(
         first: p['username'] as String,
         second: p['profile_picture'] as String?,

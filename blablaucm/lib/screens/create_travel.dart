@@ -9,6 +9,8 @@ import 'package:blablaucm/services/api_service.dart';
 import 'package:blablaucm/providers/storage_provider.dart';
 import 'package:blablaucm/services/route_services/location_service.dart';
 import 'package:blablaucm/services/route_services/osm_service.dart';
+import 'package:blablaucm/services/route_services/ors_routing_service.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:blablaucm/screens/create_travel_steps.dart'; 
 import 'package:blablaucm/screens/helper.dart';
 
@@ -25,6 +27,7 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
   final ApiService api = ApiService();
   final SecureStorageService storage = SecureStorageService();
   final LocationService placesService = OsmService();
+  final OrsRoutingService routingService = OrsRoutingService();
 
   int currentStep = 0; // Pasos para crear un viaje: 0: Fecha, 1: Ruta, 2: Vehiculo, 3: Datos adicionales, 4: Resumen
   bool showError = false; // Muestra si hay error para no pasar al siguiente paso
@@ -45,6 +48,11 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
   double? destLng;
 
   final TextEditingController durationCtrl = TextEditingController();
+  bool isEstimatingDuration = false; // Variables para determinar si se esta estimando la duracion
+  int lastDurationRequest = 0;
+  LatLng? lastEstimatedOrigin; // Coordenadas del origen
+  LatLng? lastEstimatedDest; // Coordenadas del destino
+  // Solo se calcula la estimacion si las coordenadas han cambiado, si no no
   final List<PickUpPointModel> pickUpPoints = [];
   
   List<VehicleModel> userVehicles = [];
@@ -117,6 +125,34 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
     if (onModalUpdate != null) onModalUpdate();
   }
 
+  // Funcion para calcular la duracion aproximada del viaje en base al origen y al destino
+  Future<void> _estimateDuration() async {
+    // Se debe tener un origen y un destino
+    if (originLat == null || originLng == null || destLat == null || destLng == null) return;
+
+    final origin = LatLng(originLat!, originLng!);
+    final destination = LatLng(destLat!, destLng!);
+    if (origin == lastEstimatedOrigin && destination == lastEstimatedDest) return;
+
+    final requestId = ++lastDurationRequest;
+    setState(() => isEstimatingDuration = true);
+
+    // Se saca la duracion aproximada usando el servicio de rutas 
+    final route = await routingService.getRoute([origin, destination]);
+
+    if (!mounted || requestId != lastDurationRequest) return;
+
+    setState(() {
+      if (route != null) {
+        // Se muestra en minutos, redondeando hacia arriba
+        durationCtrl.text = (route.totalDuration / 60).ceil().toString();
+        lastEstimatedOrigin = origin;
+        lastEstimatedDest = destination;
+      }
+      isEstimatingDuration = false;
+    });
+  }
+
   // Funcion para crear el viaje, mandando a la api el JSON con los datos del viaje
   Future<void> _createTravel() async {
     setState(() => isCreating = true);
@@ -140,7 +176,7 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
         "is_periodic": selectedTravelType == TravelType.periodic,
         "periodic_interval": selectedTravelType == TravelType.periodic ? int.tryParse(periodicDaysCtrl.text) : null,
         // la fecha se pasa en UTC y con el iso8601 para evitar errores de formato y la zona horaria
-        "end_periodic_date": selectedTravelType == TravelType.periodic && endPeriodicDate != null ? endPeriodicDate!.toUtc().toIso8601String().split('T')[0] : null,
+        "end_periodic_date": selectedTravelType == TravelType.periodic && endPeriodicDate != null ? formatDateOnly(endPeriodicDate!) : null,
         "creation_user": userId,
         "vehicle_id": vehicle.id,
         "state": TravelStatus.active.name, // El viaje que se crea siempre es activo
@@ -211,6 +247,18 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
       setState(() => showError = true); 
       return;
     }
+    if (currentStep == 0 && selectedDate != null && selectedDate!.isBefore(DateTime.now())) {
+      // En el paso 0 y la fecha es anterior a la fecha actual, se muestra un error
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("La fecha seleccionada no puede ser anterior a la fecha actual."), 
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      setState(() => showError = true); 
+      return;
+    }
     // En el paso 1, se comprueba que se hayan completado los campos de origen, destino y duración y que las coordenadas sean validas
     if (currentStep == 1) {
       if (originCtrl.text.isEmpty || destinationCtrl.text.isEmpty || durationCtrl.text.isEmpty) {
@@ -231,10 +279,24 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
         return;
       }
 
+      if (originLat == destLat && originLng == destLng) { // Si es al mismo punto de origen y destino debe lanzar un error
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("No se puede seleccionar origen y destino iguales."), 
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => showError = true); 
+        return;
+      }
+
       pickUpPoints.removeWhere((punto) => punto.name.isEmpty); // Se eliminan las paradas que esten vacias
 
       // Validacion de las coordenadas y fechas de las paradas intermedias
       bool hasInvalidPickUpPoint = pickUpPoints.any((punto) => punto.lat == null || punto.lng == null);
+      // Se valida que no haya paradas intermedias iguales al origen o destino
+      bool hasSameOriginDestPickUpPoint = pickUpPoints.any((punto) => (punto.lat == originLat && punto.lng == originLng) || (punto.lat == destLat && punto.lng == destLng));
       bool hasNoDatePickUpPoint = pickUpPoints.any((punto) => punto.date == null);
       if (hasInvalidPickUpPoint) { // Se valida que todas las paradas tengan coordenadas validas
         ScaffoldMessenger.of(context).showSnackBar(
@@ -251,6 +313,17 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Por favor, introduce una hora para las paradas intermedias."), 
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        setState(() => showError = true); 
+        return;
+      }
+      if(hasSameOriginDestPickUpPoint){ // Si hay alguna parada intermedia que sea igual al origen o destino, se muestra un error
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("No se puede seleccionar una parada intermedia igual al origen o destino."), 
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
@@ -459,11 +532,14 @@ class _CreatedTravelScreenState extends State<CreatedTravelScreen> {
           showError: showError,
           pickUpPoints: pickUpPoints,
           placesService: placesService,
+          isEstimatingDuration: isEstimatingDuration,
+          selectedDate: selectedDate,
           onCoordsUpdated: (lat, lng, isOrigin) {
             setState(() {
-              if (isOrigin) { originLat = lat; originLng = lng; } 
+              if (isOrigin) { originLat = lat; originLng = lng; }
               else { destLat = lat; destLng = lng; }
             });
+            _estimateDuration();
           },
           onPickUpPointsChanged: () => setState(() {}),
         );

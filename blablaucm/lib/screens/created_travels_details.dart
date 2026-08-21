@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:blablaucm/models/api_error.dart';
 import 'package:blablaucm/models/travel_model.dart';
 import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/screens/travel_details.dart';
@@ -84,11 +85,12 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
   }
 
   // Funcion para llamar a la api para eliminar un pasajero del viaje
-  Future<bool> _removePassengerFromTravel(String passengerUsername) async {
-    // Se saca el id del usuario 
+  // Devuelve null si se ha eliminado, o el motivo concreto del fallo
+  Future<ApiError?> _removePassengerFromTravel(String passengerUsername) async {
+    // Se saca el id del usuario
     final String? userId = await _storage.getElement('user_id');
     if (userId == null || userId.isEmpty) {
-      return false;
+      return ApiError.connection;
     }
 
     // Se monta el endpoint para eliminar al pasajero del viaje
@@ -104,17 +106,21 @@ class _CreatedTravelsDetailsScreenState extends State<CreatedTravelsDetailsScree
       },
     );
 
-    // Se comprueba que la respuesta sea correcta, si no se ha podido, se devuelve false
-    final bool success = response != null && response['status'] == 'ok';
+    if (response == null) return ApiError.connection;
 
-    if (success && mounted) {
+    // Si hay un error en la respuesta, se devuelve el error correspondiente
+    if (response['status'] != 'ok') {
+      return ApiError.from(response) ?? ApiError.connection;
+    }
+
+    if (mounted) {
       setState(() {
         // Actualiza el numero de plazas del viaje
         widget.travel.remainingSeats += 1;
       });
     }
 
-    return success;
+    return null;
   }
 
   // Funcion para crear la pantalla

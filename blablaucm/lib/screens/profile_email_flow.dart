@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:blablaucm/models/api_error.dart';
+import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/models/user_model.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/services/api_service.dart';
@@ -116,12 +118,12 @@ class ProfileEmailFlow {
                   isLoading: isChecking,
                   onPressed: () async {
                     setStateDialog(() => isChecking = true);
-                    final exists = await _verifyExistingEmail(newEmail); // Se verifica si el email ya esta en uso
+                    final error = await _checkEmailAvailable(newEmail); // Se verifica si el email ya esta en uso
                     if (!context.mounted) return;
                     Navigator.pop(context);
 
-                    if (exists) { // Si ya esta en uso, se muestra un mensaje de error
-                      _editEmail(context, user, onSuccess, initialError: "El email ya está en uso", initialEmail: newEmail);
+                    if (error != null) { // Si no se puede seguir, se dice por que
+                      _editEmail(context, user, onSuccess, initialError: EmailVerification.messageFor(error), initialEmail: newEmail);
                     }
                     else { // Si no esta en uso, se pasa al widget para introducir el codigo de verificacion
                       _showVerificationCodeDialog(context, user, newEmail, onSuccess);
@@ -136,13 +138,27 @@ class ProfileEmailFlow {
     );
   }
 
-  // Función para verificar si el email ya esta en uso, devuelve true unicamente si el backend devuelve que el email esta libre, en caso contrario se devuelve false
-  static Future<bool> _verifyExistingEmail(String newEmail) async {
+  // Comprueba si el correo esta libre. Devuelve null si lo esta, o el motivo por el que no se puede seguir
+  static Future<ApiError?> _checkEmailAvailable(String newEmail) async {
     // Se construye el endpoint
     final endpoint = dotenv.env['VERIFY_EXIST_EMAIL_ENDPOINT'] ?? '/users/exist_email/';
     // Se hace la petición a la api
     final response = await api.requestToApi(endpoint, queryParams: {'email': newEmail});
-    return !(response != null && response['status']?.toLowerCase() == 'ok');
+
+    if (response == null) return ApiError.connection;
+
+    final error = ApiError.from(response);
+    if (error != null) return error;
+
+    // La api responde OK si esta libre y "KO" si lo tiene otra cuenta
+    if (response['status']?.toString().toLowerCase() == 'ok'){
+      return null;
+    }
+
+    return const ApiError(
+      code: ErrorCode.emailAlreadyExists,
+      message: "El email ya está en uso",
+    );
   }
 
   // Widget para introducir el codigo de verificacion

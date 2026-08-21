@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:blablaucm/models/pair.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:blablaucm/models/enums.dart';
@@ -440,6 +441,27 @@ Widget skeletonItem() {
   );
 }
 
+// Widget que muestra un mensaje para cuando una pantalla no tiene nada que mostrar, muestra un icono y el texto centrados. 
+Widget buildEmptyState({required IconData icon, required String message}) {
+  return Center(
+    child: Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 48, color: Colors.grey),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.grey, fontSize: 16),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 // Clase para englobar las valoraciones
 class DriverRatingsWidget extends StatelessWidget {
   final List<Pair<RatingsTypes, double>> ratings;
@@ -458,11 +480,9 @@ class DriverRatingsWidget extends StatelessWidget {
 
     // Si no tiene valoraciones, se muestra un mensaje
     if (ratings.isEmpty) {
-      return const Center(
-        child: Text(
-          "Este conductor aún no tiene valoraciones.",
-          style: TextStyle(color: Colors.grey, fontSize: 16),
-        ),
+      return buildEmptyState(
+        icon: Icons.star_border,
+        message: "Este conductor aún no tiene valoraciones.",
       );
     }
 
@@ -553,22 +573,9 @@ class DriverPreferencesWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     // Si no hay preferencias, se muestra un mensaje indicandolo
     if (preferences.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.person_outline, size: 48, color: Colors.grey),
-              SizedBox(height: 16),
-              Text(
-                "Este usuario no ha indicado sus preferencias.",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, fontSize: 16),
-              ),
-            ],
-          ),
-        ),
+      return buildEmptyState(
+        icon: Icons.person_outline,
+        message: "Este usuario no ha indicado sus preferencias.",
       );
     }
 
@@ -661,13 +668,18 @@ class TravelExtraData {
   }) : futureTravels = futureTravels ?? [];
 }
 
+// Funcion para formatear una fecha sin hora para la api
+String formatDateOnly(DateTime date) {
+  return "${date.year.toString().padLeft(4, '0')}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
+}
+
 // Funcion para parsear las fechas
 DateTime? _parseTravelDate(dynamic value) {
   if (value is DateTime) {
     return value;
   }
   if (value is String) {
-    return DateTime.tryParse(value);
+    return DateTime.tryParse(value)?.toLocal();
   }
   if (value is num) {
     return DateTime.fromMillisecondsSinceEpoch(value.toInt());
@@ -786,6 +798,234 @@ Future<TravelExtraData> fetchTravelExtraData({required String travelId, required
     // Si hay un error, se lanza para que el widget lo capture
     throw Exception("Error del servidor al obtener detalles del viaje");
   }
+}
+
+// Ruta del documento con los terminos y condiciones dentro de los assets
+const String termsAssetPath = 'assets/legal/terms_and_conditions.md';
+
+// El documento se guarda una vez leido para no volver a cargarlo del disco cada vez que se abre la modal
+String? _cachedTerms;
+
+// Funcion para cargar el texto de los terminos y condiciones desde los assets
+Future<String> loadTermsAndConditions() async {
+  _cachedTerms ??= await rootBundle.loadString(termsAssetPath);
+  return _cachedTerms!;
+}
+
+// Convierte el texto en negrita de markdown (**texto**) en fragmentos de texto con estilo
+List<TextSpan> _markdownSpans(String text, TextStyle baseStyle) {
+  final spans = <TextSpan>[];
+  final parts = text.split('**');
+  for (int i = 0; i < parts.length; i++) {
+    if (parts[i].isEmpty) continue;
+    // Los fragmentos en posicion impar son los que van entre ** y **
+    final isBold = i.isOdd;
+    spans.add(TextSpan(
+      text: parts[i],
+      style: isBold ? baseStyle.copyWith(fontWeight: FontWeight.bold) : baseStyle,
+    ));
+  }
+  return spans;
+}
+
+// Convierte el documento markdown en widgets.
+List<Widget> _markdownToWidgets(String source, AppColors colors) {
+  final widgets = <Widget>[];
+  final bodyStyle = TextStyle(fontSize: 14, height: 1.4, color: colors.textSecondary);
+
+  for (final rawLine in source.split('\n')) {
+    final line = rawLine.trim();
+
+    if (line.isEmpty) { // Las lineas vacias solo separan parrafos
+      widgets.add(const SizedBox(height: 8));
+      continue;
+    }
+
+    if (line == '---') { // Separador
+      widgets.add(const Divider(height: 20));
+      continue;
+    }
+
+    // Titulos, cuanto mas nivel tiene el titulo mas pequeño se muestra
+    if (line.startsWith('#')) {
+      final level = line.contains(' ') ? line.indexOf(' ') : 1;
+      final content = line.substring(level).trim();
+      final size = level == 1 ? 20.0 : level == 2 ? 17.0 : 15.0;
+      widgets.add(Padding(
+        padding: EdgeInsets.only(top: level == 1 ? 0 : 12, bottom: 6),
+        child: Text(
+          content.replaceAll('**', ''),
+          style: TextStyle(fontSize: size, fontWeight: FontWeight.bold, color: colors.textPrimary),
+        ),
+      ));
+      continue;
+    }
+
+    // Elementos de una lista, se les añade el punto y una sangria
+    if (line.startsWith('- ')) {
+      widgets.add(Padding(
+        padding: const EdgeInsets.only(left: 8, bottom: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('•  ', style: bodyStyle),
+            Expanded(
+              child: RichText(text: TextSpan(children: _markdownSpans(line.substring(2), bodyStyle))),
+            ),
+          ],
+        ),
+      ));
+      continue;
+    }
+
+    // El resto se muestra como un parrafo normal
+    widgets.add(Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: RichText(text: TextSpan(children: _markdownSpans(line, bodyStyle))),
+    ));
+  }
+
+  return widgets;
+}
+
+// Modal con los terminos y condiciones de uso, devuelve true si el usuario los acepta
+Future<bool> showTermsAndConditionsModal(BuildContext context) async {
+  bool accepted = false; // Si el usuario ha marcado la casilla
+
+  final result = await showDialog<bool>(
+    context: context,
+    barrierDismissible: false, // No se puede cerrar pulsando fuera, hay que decidir
+    builder: (dialogContext) {
+      final colors = AppColors.of(dialogContext);
+      return StatefulBuilder(
+        builder: (innerContext, setStateDialog) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                const Icon(Icons.gavel, color: AppColors.primary, size: 24),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "Términos y Condiciones",
+                    style: TextStyle(fontWeight: FontWeight.bold, color: colors.textPrimary),
+                  ),
+                ),
+              ],
+            ),
+            contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            content: SizedBox(
+              width: 500,
+              // Se limita la altura para que el documento tenga su propio scroll y la casilla de aceptacion quede siempre visible
+              height: MediaQuery.of(innerContext).size.height * 0.55,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: FutureBuilder<String>(
+                      future: loadTermsAndConditions(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState != ConnectionState.done) { // Mientras carga el documento
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        if (snapshot.hasError || snapshot.data == null) { // Si no se ha podido leer el documento
+                          return Center(
+                            child: Text(
+                              "No se han podido cargar los términos y condiciones. Inténtalo de nuevo.",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: colors.danger),
+                            ),
+                          );
+                        }
+                        return Scrollbar(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.only(right: 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: _markdownToWidgets(snapshot.data!, colors),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const Divider(height: 16),
+                  // Casilla de aceptacion, sin marcarla no se puede continuar
+                  CheckboxListTile(
+                    value: accepted,
+                    onChanged: (value) => setStateDialog(() => accepted = value ?? false),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    activeColor: AppColors.primary,
+                    title: Text(
+                      "He leído y acepto los Términos y Condiciones y la Política de Privacidad, y declaro ser mayor de 18 años.",
+                      style: TextStyle(fontSize: 13, color: colors.textSecondary),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              dialogButton(dialogContext, isAccept: false, label: "Cancelar", onPressed: () => Navigator.pop(dialogContext, false)),
+              dialogButton(
+                dialogContext,
+                isAccept: true,
+                label: "Aceptar",
+                color: AppColors.primary,
+                // Si no se ha marcado la casilla, el boton queda deshabilitado
+                onPressed: accepted ? () => Navigator.pop(dialogContext, true) : null,
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+
+  return result ?? false;
+}
+
+// Modal de espera, para las operaciones que tardan y no deben dejar tocar la pantalla mientras tanto (por ejemplo iniciar sesion al terminar el registro).
+void showLoadingModal(BuildContext context, {String message = "Cargando..."}) {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (dialogContext) {
+      return PopScope(
+        canPop: false, // El boton de atras no cierra la espera
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              const SizedBox(width: 16),
+              Flexible(
+                child: Text(
+                  message,
+                  style: TextStyle(
+                    color: AppColors.of(dialogContext).textSecondary,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+// Cierra el modal de espera abierto con showLoadingModal
+void closeLoadingModal(BuildContext context) {
+  Navigator.of(context, rootNavigator: true).pop();
 }
 
 // Funcion para mostrar una ventana modal para mostrar un mensaje, permite distinguir si es error o no, eso cambia el color del texto y el icono

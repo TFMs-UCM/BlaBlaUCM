@@ -9,10 +9,10 @@ import 'package:blablaucm/screens/helper.dart';
 class ProfileImageModal {
 
   // Funcion para mostrar la modal de la imagen de perfil, recibe la imagen actual
-  static void show(BuildContext context, { required ImageProvider? currentImage, required Function(PickedImage?) onSave}) {
+  static void show(BuildContext context, { required ImageProvider? currentImage, required Function(PickedImage?) onSave, PickedImage? initialImage}) {
     final picker = ImagePickerService();
-    PickedImage? selectedImage;
-    bool changed = false;
+    PickedImage? selectedImage = initialImage;
+    bool changed = initialImage != null; // Con la foto ya puesta se puede guardar
     bool isDeleted = false; // Para saber si el usuario elimino la foto que tenia
 
     // Funcion para obtener la imagen
@@ -139,7 +139,25 @@ class ProfileImageModal {
                       dialogButton(context, isAccept: false, label: "Cancelar", onPressed: () => Navigator.pop(context)),
                       // Si la foto fue eliminada, se pasa null a la api para que la borre, sino se le pasa la nueva foto
                       dialogButton(context, isAccept: true, label: "Guardar",
-                        onPressed: changed ? () { onSave(isDeleted ? null : selectedImage); } : null,
+                        onPressed: changed
+                            ? () async {
+                                final PickedImage? result = isDeleted ? null : selectedImage;
+                                // Se le pide la confirmacion al usuario
+                                final bool confirm = await showConfirmationModal(
+                                  context,
+                                  title: "Confirmar cambios",
+                                  message: result != null
+                                      ? "¿Estás seguro de que deseas actualizar tu foto de perfil?"
+                                      : "¿Estás seguro de que deseas eliminar tu foto de perfil actual?",
+                                );
+
+                                if (!confirm || !context.mounted){
+                                  return;
+                                }
+                                Navigator.pop(context);
+                                onSave(result);
+                              }
+                            : null,
                       ),
                     ],
                   )

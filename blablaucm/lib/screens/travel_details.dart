@@ -1,3 +1,4 @@
+import 'package:blablaucm/models/api_error.dart';
 import 'package:blablaucm/models/enums.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -15,7 +16,8 @@ import 'package:blablaucm/theme/app_colors.dart';
 class TravelDetailsScreen extends StatefulWidget {
   final TravelModel travel; // Los datos del viaje
   final bool canManagePassengers; // Si puede o no modificar pasajeros
-  final Future<bool> Function(String passengerUsername)? onRemovePassenger; // Funcion que se llamara al eliminar un pasajero
+  // Funcion que se llama al eliminar un pasajero, devuelve null si se ha eliminado, o el error en caso de fallo
+  final Future<ApiError?> Function(String passengerUsername)? onRemovePassenger;
   final VoidCallback? onEdited; // Callback que se llama tras editar el viaje con exito
 
   const TravelDetailsScreen({
@@ -412,8 +414,7 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
                   ),
                   _infoRow(Icons.event_seat, "Asientos disponibles: ", true, widget.travel.remainingSeats.toString()),
                   _infoRow(Icons.groups, "Colectivo: ", true, driver.role.label),
-                  _infoRow(Icons.update, "Tipo: ", true, widget.travel.isPeriodic ? "Periódico" : "Puntual"),
-                  // TODO se puede añadir los usuarios denegados
+                  _infoRow(Icons.update, "Tipo: ", true, widget.travel.isPeriodic ? "Periódico" : "Puntual")
                 ],
               ),
             ),
@@ -522,6 +523,20 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
       builder: (dialogContext) {
         return StatefulBuilder(
           builder: (dialogContext, setDialogState) {
+            // Traduce el fallo al quitar un pasajero al mensaje que ve el conductor
+            String removalMessage(ApiError error) {
+              switch (error.code) {
+                case ErrorCode.userDontExist:
+                  return "No existe ningún usuario con ese nombre.";
+                case ErrorCode.notFound:
+                  return "Ese pasajero ya no tiene plaza en este viaje. Actualiza la pantalla.";
+                case ErrorCode.insufficientCredentials:
+                  return "Solo el conductor del viaje puede eliminar pasajeros.";
+                default:
+                  return "No se pudo eliminar al pasajero. Inténtalo de nuevo.";
+              }
+            }
+
             // Funcion para eliminar un pasajero, antes se muestra una modal para confirmar la eliminacion
             Future<void> removePassenger(String passengerUsername) async {
               final confirm = await showConfirmationModal(
@@ -535,15 +550,15 @@ class _TravelDetailsScreenState extends State<TravelDetailsScreen> {
 
               if (!confirm) return;
 
-              bool removed = true;
+              ApiError? error;
               if (widget.onRemovePassenger != null) {
-                removed = await widget.onRemovePassenger!(passengerUsername);
+                error = await widget.onRemovePassenger!(passengerUsername);
               }
 
               if (!mounted) return;
 
-              if (!removed) { // Si no se ha eliminado correctamente, se muestra un mensaje de error
-                showModal(context, "No se pudo eliminar al pasajero. Inténtalo de nuevo.");
+              if (error != null) { // Si no se ha eliminado correctamente, se muestra el motivo
+                showModal(context, removalMessage(error));
                 return;
               }
 

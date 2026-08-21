@@ -409,6 +409,8 @@ class ProfileDialogs {
                 if (!innerContext.mounted) return;
 
                 if (response != null && response['status']?.toLowerCase() == 'ok') {
+                  // Cambiar la contraseña revoca todas las sesiones de la cuenta, por lo que devuelve un par de tokens nuevo
+                  await api.saveSession(response);
                   Navigator.pop(innerContext);
                   showModal(context, "Tu contraseña se ha cambiado correctamente.", title: "Éxito", type: AlertType.success);
                 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:blablaucm/models/api_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -138,7 +139,7 @@ class _NotificationTrayScreenState extends State<NotificationTrayScreen> {
     );
 
     // Si la respuesta es correcta, se marca como leida
-    if (mounted && response != null) {
+    if (mounted && response != null && ApiError.from(response) == null) {
       setState(() {
         notification.isRead = true;
         if (widget.user.unreadNotificationsCount > 0){

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:blablaucm/models/api_error.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/models/user_model.dart';
@@ -8,8 +9,11 @@ import 'package:flutter/material.dart';
 import 'package:blablaucm/screens/search_travel.dart';
 import 'package:blablaucm/screens/chats.dart';
 import 'package:blablaucm/screens/profile.dart';
+import 'package:blablaucm/screens/helper.dart';
 import 'package:blablaucm/screens/notification_tray.dart';
+import 'package:blablaucm/models/picked_image.dart';
 import 'package:blablaucm/services/api_service.dart';
+import 'package:blablaucm/services/image_picker_service.dart';
 import 'package:blablaucm/services/push_notification_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/providers/storage_provider.dart';
@@ -70,7 +74,7 @@ class _HomePageState extends State<HomePage> with RouteAware {
       // Se reliza la peticion
       Map<String, dynamic>? response = await apiService.requestToApi(userEndpoint);
 
-      if (response != null) {
+      if (response != null && ApiError.from(response) == null) {
         user = UserModel.fromJson(response);
 
         if ((user?.profPicPath ?? '').isNotEmpty) { // Cargar la foto de perfil
@@ -130,11 +134,41 @@ class _HomePageState extends State<HomePage> with RouteAware {
     });
   }
 
+  // Recupera la foto de perfil que se perdio si Android mato la app mientras estaba abierta la camara
+  Future<void> _recoverPendingProfileImage() async {
+    if (!mounted || user == null) return;
+
+    PickedImage? lostImage;
+    try {
+      lostImage = await ImagePickerService().recoverLostImage();
+    }
+    catch (e) { // El plugin no ha podido devolver la foto
+      if (!mounted) return;
+      showModal(context, "No se ha podido recuperar la última foto realizada. Vuelve a intentarlo desde tu perfil.");
+      return;
+    }
+
+    if (lostImage == null || !mounted) return; // No habia nada pendiente
+    final PickedImage recovered = lostImage;
+
+    // Se devuelve al usuario a donde estaba
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Profile(user: user!, recoveredImage: recovered),
+      ),
+    );
+
+    if (!mounted) return;
+    setState(() {}); // Refresca el avatar de la barra al volver del perfil
+  }
+
   // Funicion de inicio
   @override
   void initState() {
     super.initState();
-    _loadUser();
+    // Solo se busca la foto perdida cuando ya se sabe quien es el usuario, porque hace falta su id para subirla
+    _loadUser().then((_) => _recoverPendingProfileImage());
     _loadNextTravel();
     PushNotificationService.initialize(); // Registra el token push del dispositivo tras iniciar sesion
     // Si llega un push de tipo notificacion con la app abierta, se refresca la bandeja

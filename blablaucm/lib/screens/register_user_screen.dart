@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:blablaucm/models/api_error.dart';
 import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/services/api_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/screens/custom_form_fields.dart';
 import 'package:blablaucm/screens/email_verification.dart';
 import 'package:blablaucm/screens/helper.dart';
+import 'package:blablaucm/screens/home.dart';
 // Pantalla que muestra el formulario para el registro de un nuevo usuario
 
 class RegisterUserScreen extends StatefulWidget {
@@ -41,6 +43,9 @@ class _RegisterUserScreenState extends State<RegisterUserScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
+  // Indica si la api ha dejado la sesion iniciada al validar la cuenta
+  bool _sessionStarted = false;
+
   // Funcion para mostar los errores como un mensaje en la parte de abajo de la pantalla
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -52,27 +57,67 @@ class _RegisterUserScreenState extends State<RegisterUserScreen> {
   }
 
   // Funcion para mostrar la ventana de verificacion
-  void _showVerificationCodeDialog(String email, String username) {
+  void _showVerificationCodeDialog(String email, String username, String password) {
     EmailVerification.showVerificationDialog(
       context: context,
       email: email,
       customMessage: "Para terminar el proceso, introduce el código que hemos enviado a:\n$email",
       onSendCode: () => EmailVerification.sendVerificationEmail(username: username),
-      onVerifyCode: (code) => EmailVerification.verifyCode(
-        username: username,
-        code: code,
-        validate: true, 
-      ),
+      // Se guarda si el usuario ha entrado en la app tras validar la cuenta
+      onVerifyCode: (code) async {
+        final result = await EmailVerification.verifyRegistration(
+          username: username,
+          code: code,
+        );
+        _sessionStarted = result.sessionStarted;
+        return result.error;
+      },
       // Si la verificacion es correcta, se muestra al usuario un mensaje de exito
       onSuccess: () async {
-        showModal(
-          context,
-          'Tu cuenta ha sido creada correctamente.',
-          title: 'Éxito',
-          type: AlertType.success,
-          backPage: true,
-        );
+        if (_sessionStarted) {
+          _showAccountCreated(loggedIn: true);
+          return;
+        }
+
+        // Si el servidor no devuelve la sesion, se inicia con las credenciales creadas, mientras se inicia sesion
+        // se muestra mensaje informando que se esta iniciando sesion
+        showLoadingModal(context, message: 'Iniciando sesión...');
+
+        Map<String, dynamic>? data;
+        try {
+          data = await api.login(username, password);
+        }
+        catch (_) {
+          data = null;
+        }
+
+        if (!mounted) return;
+
+        closeLoadingModal(context);
+        _showAccountCreated(loggedIn: data != null && data['user'] != null);
       },
+    );
+  }
+
+  // Funcion para mostrar el mensaje de cuentra creada, si hay sesion se entra en la app, si no, se vuelve a
+  // la pantalla de inicio de sesion para que el usuario entre a mano
+  void _showAccountCreated({required bool loggedIn}) {
+    showModal(
+      context,
+      loggedIn
+          ? 'Tu cuenta ha sido creada correctamente. ¡Bienvenido!'
+          : 'Tu cuenta ha sido creada correctamente. Inicia sesión para continuar.',
+      title: 'Éxito',
+      type: AlertType.success,
+      barrierDismissible: false,
+      backPage: !loggedIn,
+      onAccepted: loggedIn
+          ? () => Navigator.pushAndRemoveUntil( // Se entra en la app y se limpian las pantallas de registro y login
+                context,
+                MaterialPageRoute(builder: (_) => const HomePage()),
+                (_) => false,
+              )
+          : null,
     );
   }
 
@@ -147,6 +192,13 @@ class _RegisterUserScreenState extends State<RegisterUserScreen> {
 
     if (!confirmed) return; // Si el usuario no confirma, se cancela el proceso
 
+    if (!mounted) return;
+
+    // Antes de crear la cuenta hay que aceptar los terminos y condiciones
+    final bool termsAccepted = await showTermsAndConditionsModal(context);
+
+    if (!termsAccepted) return; // Sin aceptar los terminos no se crea la cuenta
+
     setState(() => isSaving = true);
 
     // Se crea en endpoint y se rellenan los datos a enviar a a la api
@@ -178,35 +230,35 @@ class _RegisterUserScreenState extends State<RegisterUserScreen> {
         return;
       }
 
-      if (response['error'] != null) { // Si la api devuelve un error, se muestra el mensaje de error y no se crea la cuenta
-        final error = response['error'];
-        final code = error['code'];
-        final message = error['message'] ?? 'Error desconocido';
-        final errorCode = ErrorCode.values.firstWhere(
-          (e) => e.code.toString() == code.toString(),
-          orElse: () => ErrorCode.unknownError,
-        );
+      final error = ApiError.from(response);
+      if (error != null) { // Si la api devuelve un error, se muestra y no se crea la cuenta
+        final message = error.message;
 
         setState(() { // Dependiendo del error, se muestra un mensaje u otro
-          switch (errorCode) {
+          switch (error.code) {
             case ErrorCode.passwordMismatch:
               _showError(message);
               break;
             case ErrorCode.usernameAlreadyExists:
-                setState(() {
-                  _usernameError = message;
-                });
-                break;
-            case ErrorCode.emailAlreadyExists:
-                setState(() {
-                  _emailError = message;
-                });
+              _usernameError = message;
               break;
-            default: // Si el codifo no esta recogido, se muestra solo el mensaje de error
+            case ErrorCode.emailAlreadyExists:
+              _emailError = message;
+              break;
+            case ErrorCode.validationError:
+            case ErrorCode.missingRequiredField:
+              _usernameError = error.fieldMessage('username') ?? _usernameError;
+              _emailError = error.fieldMessage('email') ?? _emailError;
+              _passwordError = error.fieldMessage('password') ?? _passwordError;
+              _confirmPasswordError = error.fieldMessage('password_confirm') ?? _confirmPasswordError;
+              if (_usernameError == null && _emailError == null && _passwordError == null && _confirmPasswordError == null) {
+                _showError(message);
+              }
+              break;
+            default: // Si el codigo no esta recogido, se muestra solo el mensaje de error
               _showError(message);
-            }
           }
-        );
+        });
         return;
       }
       
@@ -215,7 +267,7 @@ class _RegisterUserScreenState extends State<RegisterUserScreen> {
         widget.onSave!(response);
       }
       // Se llama a la funcion para verificar el codigo enviado al email
-      _showVerificationCodeDialog(email, username);
+      _showVerificationCodeDialog(email, username, password);
     } 
     catch (e) { // Si hay una excepcion, se informa al usuario de que ha habido un error
       setState(() => isSaving = false);

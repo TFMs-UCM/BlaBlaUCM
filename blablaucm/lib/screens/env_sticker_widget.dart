@@ -37,26 +37,43 @@ class EnvStickerBadge extends StatelessWidget {
       );
     }
 
+    // El borde se pinta como un circulo exterior para poder partirlo en dos colores igual que el fondo (caso de la etiqueta ECO)
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: config.background,
-        border: Border.all(color: config.border, width: 1.5),
+        gradient: _halves(config.border, config.borderSecondary),
       ),
-      alignment: Alignment.center,
-      child: Text(
-        config.label,
-        style: TextStyle(
-          color: config.text,
-          fontSize: size * 0.38,
-          fontWeight: FontWeight.bold,
-          height: 1,
+      padding: const EdgeInsets.all(1.5),
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: _halves(config.background, config.backgroundSecondary),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          config.label,
+          style: TextStyle(
+            color: config.text,
+            fontSize: size * 0.38,
+            fontWeight: FontWeight.bold,
+            height: 1,
+          ),
         ),
       ),
     );
   }
+}
+
+// Divide el circulo en mitad izquierda y mitad derecha, si no hay segundo color, el degradado queda plano
+LinearGradient _halves(Color first, Color? second) {
+  return LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: [first, second ?? first],
+    stops: const [0.5, 0.5],
+  );
 }
 
 class _StickerConfig {
@@ -64,12 +81,17 @@ class _StickerConfig {
   final Color background;
   final Color border;
   final Color text;
+  // Colores de la mitad derecha, solo para las etiquetas de dos tonos
+  final Color? backgroundSecondary;
+  final Color? borderSecondary;
 
   const _StickerConfig({
     required this.label,
     required this.background,
     required this.border,
     required this.text,
+    this.backgroundSecondary,
+    this.borderSecondary,
   });
 }
 
@@ -85,20 +107,22 @@ _StickerConfig? _stickerConfig(EnvSticker? sticker) {
     case EnvSticker.eco:
       return const _StickerConfig(
         label: "ECO",
-        background: Color(0xFF00897B),
-        border: Color(0xFF00695C),
+        background: Color(0xFF1565C0),
+        backgroundSecondary: Color(0xFF43A047),
+        border: Color(0xFF0D47A1),
+        borderSecondary: Color(0xFF2E7D32),
         text: Colors.white,
-      );
-    case EnvSticker.c:
-      return const _StickerConfig(
-        label: "C",
-        background: Color(0xFFFFD600),
-        border: Color(0xFFF9A825),
-        text: Color(0xFF1A1A1A),
       );
     case EnvSticker.b:
       return const _StickerConfig(
         label: "B",
+        background: Color(0xFFFFD600),
+        border: Color(0xFFF9A825),
+        text: Color(0xFF1A1A1A),
+      );
+    case EnvSticker.c:
+      return const _StickerConfig(
+        label: "C",
         background: Color(0xFF43A047),
         border: Color(0xFF2E7D32),
         text: Colors.white,

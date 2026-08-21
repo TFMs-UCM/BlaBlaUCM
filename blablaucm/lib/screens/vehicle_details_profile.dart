@@ -1,4 +1,5 @@
 import 'package:blablaucm/screens/helper.dart';
+import 'package:blablaucm/models/api_error.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/models/vehicle_model.dart';
@@ -155,8 +156,9 @@ class _VehicleDetailsProfileScreenState extends State<VehicleDetailsProfileScree
       if (!mounted) return;
 
       if(response != null){
-        if (response['error'] != null) { // Si la api devuelve un error, se muestra en una modal el error
-          showModal(context, "No se puede eliminar: ${response['error']['message']}");
+        final error = ApiError.from(response);
+        if (error != null) { // Si la api devuelve un error, se muestra en una modal el error
+          showModal(context, "No se puede eliminar: ${error.message}");
         }
         else{ // Si se elimina correctamente, se muestra una modal de exito
           widget.onDelete(widget.vehicle);

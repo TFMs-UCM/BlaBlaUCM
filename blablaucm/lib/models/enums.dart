@@ -378,12 +378,18 @@ enum ErrorCode {
   invalidValidationCode(43),
   pickupPointNotFound(44),
   travelAlreadyStarted(45),
+  passengerAlreadyValidated(46),
+  passengerNotAccepted(47),
 
   // Travel Request Errors
   invalidRequestStatus(60),
 
   // General Errors
   missingRequiredField(50),
+  validationError(51),
+  notFound(52),
+  tooManyRequests(53),
+  methodNotAllowed(54),
   internalServerError(99),
 
   unknownError(-1);

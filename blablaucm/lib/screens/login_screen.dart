@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:blablaucm/models/api_error.dart';
 import 'package:blablaucm/services/api_service.dart';
 import 'package:blablaucm/services/google_auth_service.dart';
 import 'package:blablaucm/screens/home.dart';
@@ -182,11 +183,13 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (data != null) { // El backend ha enviado una respuesta
-        if (data['error'] != null) { // Si hay un error, se muestra 
+        final error = ApiError.from(data);
+        if (error != null) { // Si hay un error, se muestra
           setState(() {
-            _errorMessage = data['error']['message'] ?? 'Error al iniciar sesión';
+            // El login lleva limite de peticiones 
+            _errorMessage = error.isTooManyRequests ? 'Demasiados intentos de acceso. Espera unos minutos.' : error.message;
           });
-        } 
+        }
         else if (data['requires_2fa'] == true) { // El backend indica que necesita el 2FA para poder acceder
           _show2FADialog(_emailController.text.trim(), _passwordController.text.trim()); // Se muestra la modal de 2FA
         } 
@@ -290,12 +293,25 @@ class _LoginScreenState extends State<LoginScreen> {
       skipInitialSend: true, // El backend ya envió el email durante el primer intento de login
       onSendCode: () async {
         // Al reenviar hace un nuevo login sin code para que el backend genere y envíe otro código
-        await _apiService.login(username, password);
+        final data = await _apiService.login(username, password);
+        if (data == null){
+          return ApiError.connection;
+        }
+        if (data['requires_2fa'] == true){
+           return null;
+        }
+        return ApiError.from(data);
       },
       onVerifyCode: (code) async {
         // Se hace el login con el code para verificar el 2FA y obtener los tokens JWT
         final data = await _apiService.login(username, password, code: code);
-        return data != null && data['user'] != null;
+        if (data == null){
+          return ApiError.connection;
+        }
+        if (data['user'] != null){
+           return null;
+        }
+        return ApiError.from(data) ?? ApiError.connection;
       },
       // Si la verificacion es correcta, se muestra al usuario un mensaje de exito
       onSuccess: () {

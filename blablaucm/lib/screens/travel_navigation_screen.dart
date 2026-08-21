@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
@@ -7,6 +10,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/models/travel_model.dart';
 import 'package:blablaucm/models/pick_up_points_model.dart';
+import 'package:blablaucm/models/api_error.dart';
 import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/services/api_service.dart';
 import 'package:blablaucm/services/route_services/ors_routing_service.dart';
@@ -45,13 +49,23 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
   // Estado del GPS
   StreamSubscription<Position>? _positionStream;
   LatLng? _currentPosition;
+  // Grados desde el norte para orientar la flecha del GPS
+  double? _currentHeading;
   bool _isFollowingUser = true;
+  // Si el GPS esta apagado o sin permisos al abrir la pantalla, la guia se queda sin arrancar
+  // Se recuerda para poder reintentarlo con el boton de centrar
+  bool _isGpsActive = false;
+  bool _isRetryingGps = false;
+
+  // Marca que la pantalla ya se ha cerrado para no arrancar el GPS a destiempo
+  bool _disposed = false;
 
   // Estado de la ruta
   RouteResult? _routeResult;
   List<LatLng> _routePoints = [];
   List<RouteStep> _routeSteps = [];
   int _currentStepIndex = 0;
+  RouteProgress? _progress;
   bool _isLoadingRoute = true;
   bool _isRecalculating = false;
 
@@ -67,10 +81,22 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
 
   // Umbral de desviacion para recalcular la ruta (en metros)
   static const double _deviationThreshold = 50.0;
+  // Radio para dar por alcanzado el destino final del viaje
   static const double _arrivalThreshold = 35.0;
+  // Radio dentro del cual se considera que se ha estado en una parada de recogida
+  static const double _pickupArrivalThreshold = 1000.0;
+  // Cuanto hay que alejarse del punto mas cercano al que se llego para dar la parada por pasada
+  static const double _passedAwayMargin = 250.0;
+  // Lo mas cerca que se ha llegado a estar de la parada actual
+  double? _minDistanceToCurrentStop;
   // Tiempo minimo entre recalculos para no saturar la API
   DateTime? _lastRecalculationTime;
   static const Duration _minRecalculationInterval = Duration(seconds: 15);
+
+  // Velocidad a partir de la cual el rumbo que da el GPS es fiable (m/s)
+  static const double _minSpeedForHeading = 0.5;
+  // Separacion minima entre dos posiciones para deducir el rumbo de ellas (m)
+  static const double _minDistanceForBearing = 8.0;
 
   // Lista de pasajeros validados
   final Set<String> _validatedCodes = {};
@@ -78,18 +104,30 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
   @override
   void initState() {
     super.initState();
+    // Conduciendo no se toca la pantalla, y al apagarse el sistema corta las
+    // actualizaciones de posicion, se mantiene encendida solo en esta pantalla.
+    WakelockPlus.enable();
     _initLocationAndRoute();
   }
 
   @override
   void dispose() {
-    _positionStream?.cancel();
+    _disposed = true;
+    _stopPositionUpdates();
+    WakelockPlus.disable();
     super.dispose();
+  }
+
+  // Corta las actualizaciones de posicion y cierra la notificacion de navegacion en curso
+  void _stopPositionUpdates() {
+    _positionStream?.cancel();
+    _positionStream = null;
+    _isGpsActive = false;
   }
 
   // Se inicializa el GPS y calcula la ruta inicial
   Future<void> _initLocationAndRoute() async {
-    await _initGps();
+    await _startGps();
     _buildStopPoints();
     await _calculateRoute();
   }
@@ -122,6 +160,7 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
     _currentStopIndex = _findNextStopIndex(0);
     _lastArrivalStopIndex = -1;
     _hasReachedFinalDestination = false;
+    _minDistanceToCurrentStop = null;
   }
 
   // Saca la siguiente parada que no se ha alcanzado aun
@@ -152,15 +191,49 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
     return 'Destino';
   }
 
-  // Inicializa el servicio de geolocalizacion
-  Future<void> _initGps() async {
+  // Ajustes del stream de posiciones para navegar.
+  LocationSettings _buildLocationSettings() {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 5, // Se actualiza cada 5 metros de movimiento
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'Navegación en curso',
+          notificationText: 'BlaBlaUCM te está guiando hasta tu destino',
+          notificationChannelName: 'Navegación',
+          enableWakeLock: true,
+          setOngoing: true,
+          color: AppColors.primary,
+        ),
+      );
+    }
+
+    if (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS) {
+      return AppleSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 5,
+        activityType: ActivityType.automotiveNavigation,
+        pauseLocationUpdatesAutomatically: false,
+        showBackgroundLocationIndicator: true,
+      );
+    }
+
+    return const LocationSettings(
+      accuracy: LocationAccuracy.bestForNavigation,
+      distanceFilter: 5,
+    );
+  }
+
+  // Funcion para iniciar el servicio de geolocalizacion y el stream de posiciones
+  Future<bool> _startGps() async {
     // Se comprueba que el servicio de localizacion este habilitado
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       if (mounted) {
-        showModal(context, 'Por favor, activa el GPS para usar la navegación.');
+        showModal(context, 'Por favor, activa el GPS para usar la navegación. '
+            'Cuando lo actives, pulsa el botón de centrar para reanudar la guía.');
       }
-      return;
+      return false;
     }
 
     // Se comprueba y solicita los permisos de ubicacion
@@ -171,7 +244,7 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
         if (mounted) {
           showModal(context, 'Se necesitan permisos de ubicación para la navegación.');
         }
-        return;
+        return false;
       }
     }
 
@@ -179,7 +252,7 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
       if (mounted) {
         showModal(context, 'Los permisos de ubicación están permanentemente denegados. Actívalos en ajustes.');
       }
-      return;
+      return false;
     }
 
     // Se obtiene la posicion actual
@@ -197,15 +270,20 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
       });
     }
 
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // Se actualiza cada 10 metros de movimiento
-      ),
+    if (_disposed) return false;
+
+    // Un reintento no debe dejar dos streams vivos si el anterior seguia 
+    _stopPositionUpdates();
+
+    final subscription = Geolocator.getPositionStream(
+      locationSettings: _buildLocationSettings(),
     ).listen((Position position) async {
       if (!mounted) return;
+      final newPosition = LatLng(position.latitude, position.longitude);
+      final heading = _resolveHeading(position, newPosition);
       setState(() {
-        _currentPosition = LatLng(position.latitude, position.longitude);
+        _currentPosition = newPosition;
+        if (heading != null) _currentHeading = heading;
       });
 
       // Se mueve el mapa para seguir al usuario si esta activado
@@ -221,8 +299,71 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
 
       // Se comprueba si el conductor se ha desviado de la ruta
       _checkRouteDeviation();
+    }, onError: (_) {
+      if (!mounted) return;
+      _stopPositionUpdates();
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Se ha perdido la señal del GPS. Actívalo y pulsa el botón de centrar.'),
+          backgroundColor: Color(0xFFEF4444),
+        ),
+      );
     });
+    
+    if (_disposed) {
+      subscription.cancel();
+      return false;
+    }
+
+    _positionStream = subscription;
+    _isGpsActive = true;
+    return true;
   }
+
+  // Funcion para intentar arrancar la el GPS desde el boton de centrar
+  Future<void> _retryGps() async {
+    if (_isRetryingGps) return;
+    setState(() {
+      _isRetryingGps = true;
+    });
+
+    final started = await _startGps();
+
+    if (!mounted) {
+      _isRetryingGps = false;
+      return;
+    }
+
+    setState(() {
+      _isRetryingGps = false;
+      if (started) _isFollowingUser = true;
+    });
+
+    if (!started || _currentPosition == null) return;
+
+    if (_isMapReady) {
+      _mapController.move(_currentPosition!, 16);
+    }
+    await _calculateRoute(fromPosition: _currentPosition);
+  }
+
+  // Funcion para sacar el rumbo de la marcha para orientar la flecha del mapa
+  double? _resolveHeading(Position position, LatLng newPosition) {
+    if (position.speed >= _minSpeedForHeading && position.heading != 0.0) {
+      return _normalizeDegrees(position.heading);
+    }
+
+    final previous = _currentPosition;
+    if (previous == null) return null;
+    if (_distanceCalc.as(LengthUnit.Meter, previous, newPosition) < _minDistanceForBearing) {
+      return null;
+    }
+    return _normalizeDegrees(_distanceCalc.bearing(previous, newPosition));
+  }
+
+  // Funcion para normalizar los grados al rango [0, 360), el rumbo calculado sale de un atan2 y viene en [-180, 180]
+  double _normalizeDegrees(double degrees) => (degrees % 360 + 360) % 360;
 
   // Calcula la ruta usando OpenRouteService
   Future<void> _calculateRoute({LatLng? fromPosition}) async {
@@ -257,7 +398,11 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
         _isLoadingRoute = false;
         _isRecalculating = false;
         _currentStepIndex = 0;
+        _progress = null;
       });
+
+      // Se recoloca el progreso con la posicion actual
+      _updateCurrentStep();
 
       if (_routePoints.isNotEmpty && (fromPosition == null || !_isFollowingUser)) {
         _fitRouteOnMap();
@@ -294,18 +439,42 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
     });
   }
 
-  // Actualiza el paso actual basandose en la posicion del conductor
+  // Funcion para actualizar el progreso sobre la ruta con la ultima posicion del GPS
   void _updateCurrentStep() {
-    if (_routeSteps.isEmpty || _currentPosition == null) return;
-    final newIndex = OrsRoutingService.findCurrentStepIndex(_currentPosition!, _routeSteps);
-    if (newIndex != _currentStepIndex) {
-      setState(() {
-        _currentStepIndex = newIndex;
-      });
-    }
+    if (_routeResult == null || _routeSteps.isEmpty || _currentPosition == null) return;
+    final progress = OrsRoutingService.computeProgress(
+      _currentPosition!,
+      _routeResult!,
+      fromStepIndex: _currentStepIndex,
+    );
+    setState(() {
+      _progress = progress;
+      _currentStepIndex = progress.stepIndex;
+    });
   }
 
-  // Comprueba si el conductor ha llegado a la parada actual y si ha llegado avanza a la siguiente
+  // Funcion para sacar el indice de la instruccion que hay que enseñar al conductor
+  int get _displayStepIndex {
+    if (_routeSteps.isEmpty){
+      return 0;
+    }
+    final next = _currentStepIndex + 1;
+    return next < _routeSteps.length ? next : _routeSteps.length - 1;
+  }
+
+  // Funcion para sacar la distancia que falta hasta la maniobra que se esta mostrando
+  double get _distanceToNextManeuver {
+    final progress = _progress;
+    if (progress != null){
+      return progress.distanceToManeuver;
+    }
+    if (_routeSteps.isEmpty){
+      return 0;
+    }
+    return _routeSteps[_displayStepIndex].distance;
+  }
+
+  // Funcion para comprobar si el conductor ha llegado a la parada actual y si ha llegado avanza a la siguiente
   Future<void> _checkArrivalToTarget() async {
     if (_hasReachedFinalDestination || _currentPosition == null || _isAdvancingStop) return;
     final target = _getCurrentTarget();
@@ -313,12 +482,66 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
     if (_currentStopIndex == _lastArrivalStopIndex) return;
 
     final distToTarget = _distanceCalc.as(LengthUnit.Meter, _currentPosition!, target);
-    if (distToTarget <= _arrivalThreshold) {
-      _lastArrivalStopIndex = _currentStopIndex;
-      _isAdvancingStop = true;
-      await _advanceToNextStop();
-      _isAdvancingStop = false;
+    final isPickup = _currentStopIndex < _stopPickups.length && _stopPickups[_currentStopIndex] != null;
+
+    // Se guarda lo mas cerca que se ha llegado a estar antes de comparar, para que el minimo no incluya la lectura actual
+    final minSeen = _minDistanceToCurrentStop;
+    if (minSeen == null || distToTarget < minSeen) {
+      _minDistanceToCurrentStop = distToTarget;
     }
+
+    bool arrived = distToTarget <= _arrivalThreshold;
+
+    if (!arrived && isPickup && minSeen != null && minSeen <= _pickupArrivalThreshold && distToTarget > minSeen + _passedAwayMargin) {
+      arrived = true;
+    }
+
+    if (!arrived) return;
+
+    _lastArrivalStopIndex = _currentStopIndex;
+    _isAdvancingStop = true;
+    await _advanceToNextStop();
+    _isAdvancingStop = false;
+  }
+
+  // Funcion para indicar si despues del objetivo actual queda alguna parada a la que saltar
+  bool get _hasNextStop {
+    if (_hasReachedFinalDestination || _isAdvancingStop) return false;
+    return _currentStopIndex >= 0 && _currentStopIndex < _stopPoints.length - 1;
+  }
+
+  // Funcion para saltar manualmente a la siguiente parada, pidiendo confirmacion antes
+  Future<void> _confirmSkipToNextStop() async {
+    if (!_hasNextStop) return;
+
+    final currentLabel = _getCurrentTargetLabel();
+    final nextLabel = _stopLabels[_findNextStopIndex(_currentStopIndex + 1)];
+
+    final confirm = await showConfirmationModal(
+      context,
+      title: 'Ir a la siguiente parada',
+      message: '¿Dar por completada "$currentLabel" y continuar hasta "$nextLabel"?',
+      confirmText: 'Continuar',
+      cancelText: 'Cancelar',
+    );
+
+    if (!confirm || !mounted) return;
+
+    // Mientras se confirmaba el GPS pudo avanzar la parada por su cuenta
+    if (!_hasNextStop) return;
+
+    _lastArrivalStopIndex = _currentStopIndex;
+    setState(() {
+      _isAdvancingStop = true;
+    });
+    await _advanceToNextStop();
+    if (!mounted) {
+      _isAdvancingStop = false;
+      return;
+    }
+    setState(() {
+      _isAdvancingStop = false;
+    });
   }
 
   // Avanza a la siguiente parada y recalcula la ruta
@@ -362,6 +585,8 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
     setState(() {
       _currentStopIndex = nextIndex;
       _currentStepIndex = 0;
+      _progress = null;
+      _minDistanceToCurrentStop = null;
     });
 
     if (mounted) {
@@ -410,6 +635,8 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
   // Muestra la modal para validar un pasajero mediante codigo o QR
   void _showValidationModal() {
     final codeController = TextEditingController();
+    final colors = AppColors.of(context);
+    final accent = _accent(colors);
     bool isValidating = false;
 
     showDialog(
@@ -418,32 +645,34 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+              backgroundColor: colors.card,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Row(
+              title: Row(
                 children: [
-                  Icon(Icons.verified_user, color: Color(0xFF4F46E5)),
-                  SizedBox(width: 8),
-                  Text('Validar Pasajero'),
+                  Icon(Icons.verified_user, color: accent),
+                  const SizedBox(width: 8),
+                  Text('Validar Pasajero', style: TextStyle(color: colors.textPrimary)),
                 ],
               ),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text(
+                  Text(
                     'Introduce el código del pasajero o escanea su QR',
-                    style: TextStyle(color: Color(0xFF6B7280), fontSize: 14),
+                    style: TextStyle(color: colors.textSecondary, fontSize: 14),
                   ),
                   const SizedBox(height: 16),
                   // Campo para introducir el codigo manualmente
                   TextField(
                     controller: codeController,
-                    style: TextStyle(color: AppColors.of(context).textPrimary),
+                    style: TextStyle(color: colors.textPrimary),
                     decoration: InputDecoration(
                       labelText: 'Código de validación',
+                      labelStyle: TextStyle(color: colors.textSecondary),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      prefixIcon: const Icon(Icons.confirmation_number),
+                      prefixIcon: Icon(Icons.confirmation_number, color: colors.textSecondary),
                       filled: true,
-                      fillColor: AppColors.of(context).surfaceLow,
+                      fillColor: colors.surfaceLow,
                     ),
                     textCapitalization: TextCapitalization.characters,
                   ),
@@ -475,7 +704,7 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancelar', style: TextStyle(color: Color(0xFF6B7280))),
+                  child: Text('Cancelar', style: TextStyle(color: colors.textSecondary)),
                 ),
                 ElevatedButton(
                   onPressed: isValidating ? null : () async {
@@ -487,7 +716,7 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
                     });
 
                     // Se llama a la API para validar al pasajero
-                    final success = await _validatePassenger(code);
+                    final error = await _validatePassenger(code);
 
                     setDialogState(() {
                       isValidating = false;
@@ -495,7 +724,7 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
 
                     if (!dialogContext.mounted) return;
 
-                    if (success) {
+                    if (error == null) {
                       Navigator.pop(dialogContext);
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -505,12 +734,12 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
                           ),
                         );
                       }
-                    } 
+                    }
                     else {
                       ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        const SnackBar(
-                          content: Text('Código no válido o pasajero no encontrado'),
-                          backgroundColor: Color(0xFFEF4444),
+                        SnackBar(
+                          content: Text(_validationMessage(error)),
+                          backgroundColor: const Color(0xFFEF4444),
                         ),
                       );
                     }
@@ -536,8 +765,8 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
     );
   }
 
-  // Llama a la API para validar un pasajero con su codigo
-  Future<bool> _validatePassenger(String code) async {
+  // Llama a la API para validar un pasajero con su codigo, devuelve null si se ha validado, o el motivo concreto del fallo.
+  Future<ApiError?> _validatePassenger(String code) async {
     final endpoint = '${dotenv.env['TRAVELS_ENDPOINT'] ?? '/travel/'}${widget.travel.id}${dotenv.env['VALIDATE_PASSENGER_ENDPOINT'] ?? '/validate_passenger/'}';
 
     final response = await _api.requestToApi(
@@ -546,13 +775,34 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
       body: {'code': code},
     );
 
-    if (response != null && response['status'] == 'ok') {
+    if (response == null){
+      return ApiError.connection;
+    }
+    if (response['status'] == 'ok') {
       setState(() {
         _validatedCodes.add(code);
       });
-      return true;
+      return null;
     }
-    return false;
+    return ApiError.from(response) ?? ApiError.connection;
+  }
+
+  // Funcion para traducir el fallo de la validacion al mensaje que ve el conductor
+  String _validationMessage(ApiError error) {
+    switch (error.code) {
+      case ErrorCode.invalidValidationCode:
+        return 'Ese código no corresponde a ningún pasajero de este viaje.';
+      case ErrorCode.passengerAlreadyValidated:
+        return 'Ese pasajero ya estaba validado.';
+      case ErrorCode.passengerNotAccepted:
+        return 'Ese pasajero no tiene una solicitud aceptada en este viaje.';
+      case ErrorCode.tooManyRequests:
+        return 'Demasiados intentos seguidos. Espera un momento.';
+      case ErrorCode.insufficientCredentials:
+        return 'Solo el conductor del viaje puede validar pasajeros.';
+      default:
+        return error.message;
+    }
   }
 
   // Finaliza el viaje, los pasajeros no validados pasan a estado unvalidated
@@ -578,8 +828,10 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
     if (!mounted) return;
 
     if (response != null && response['status'] == 'ok') {
+      // El viaje ha terminado, asi que se apaga el GPS
+      _stopPositionUpdates();
       showModal(context, 'Viaje finalizado correctamente.', title: 'Éxito', type: AlertType.success, barrierDismissible: false, backPage: true, returnValue: true);
-    } 
+    }
     else {
       showModal(context, 'No se pudo finalizar el viaje. Inténtalo de nuevo.', barrierDismissible: false);
     }
@@ -595,25 +847,36 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
       case 4: return Icons.turn_slight_left;// Giro suave izquierda
       case 5: return Icons.turn_slight_right;// Giro suave derecha
       case 6: return Icons.straight; // Continuar recto
-      case 7: return Icons.roundabout_left; // Rotonda
+      case 7: return Icons.roundabout_left; // Entrar en la rotonda
+      case 8: return Icons.roundabout_right; // Salir de la rotonda
+      case 9: return Icons.u_turn_left; // Cambio de sentido
       case 10: return Icons.flag; // Llegada al destino
       case 11: return Icons.my_location;// Salida
+      case 12: return Icons.turn_slight_left; // Mantenerse a la izquierda
+      case 13: return Icons.turn_slight_right;// Mantenerse a la derecha
       default: return Icons.navigation;
     }
   }
 
+  // Color de la pantalla
+  Color _accent(AppColors colors) => colors.isDark ? const Color(0xFFA5B4FC) : AppColors.primary;
+
   // Funcion para constrir la pantalla
   @override
   Widget build(BuildContext context) {
+    final colors = AppColors.of(context);
+    final accent = _accent(colors);
+
     return Scaffold(
+      backgroundColor: colors.background,
       body: _isLoadingRoute
-          ? const Center(
+          ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(color: Color(0xFF4F46E5)),
-                  SizedBox(height: 16),
-                  Text('Calculando ruta...', style: TextStyle(fontSize: 16, color: Color(0xFF6B7280))),
+                  CircularProgressIndicator(color: accent),
+                  const SizedBox(height: 16),
+                  Text('Calculando ruta...', style: TextStyle(fontSize: 16, color: colors.textSecondary)),
                 ],
               ),
             )
@@ -708,7 +971,10 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
                                   ),
                                 ],
                               ),
-                              child: const Icon(Icons.navigation, color: Colors.white, size: 22),
+                              child: Transform.rotate(
+                                angle: (_currentHeading ?? 0) * math.pi / 180,
+                                child: const Icon(Icons.navigation, color: Colors.white, size: 22),
+                              ),
                             ),
                           ),
                       ],
@@ -724,53 +990,103 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: colors.card,
                       borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: colors.border),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
+                          color: Colors.black.withValues(alpha: colors.isDark ? 0.4 : 0.1),
                           blurRadius: 10,
                           offset: const Offset(0, 2),
                         ),
                       ],
                     ),
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Boton para volver atras
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context, false),
-                          child: const Icon(Icons.arrow_back, color: Color(0xFF4B5563)),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${widget.travel.origin} → ${widget.travel.destination}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                                overflow: TextOverflow.ellipsis,
+                        Row(
+                          children: [
+                            // Boton para volver atras
+                            GestureDetector(
+                              onTap: () => Navigator.pop(context, false),
+                              child: Icon(Icons.arrow_back, color: colors.textPrimary),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${widget.travel.origin} → ${widget.travel.destination}',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: colors.textPrimary),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (_routeResult != null)
+                                    Text(
+                                      '${OrsRoutingService.formatDistance(_progress?.remainingDistance ?? _routeResult!.totalDistance)}'
+                                      ' · ${OrsRoutingService.formatDuration(_progress?.remainingDuration ?? _routeResult!.totalDuration)}',
+                                      style: TextStyle(color: colors.textSecondary, fontSize: 12),
+                                    ),
+                                ],
                               ),
-                              if (_routeResult != null)
-                                Text(
-                                  '${OrsRoutingService.formatDistance(_routeResult!.totalDistance)} · ${OrsRoutingService.formatDuration(_routeResult!.totalDuration)}',
-                                  style: const TextStyle(color: Color(0xFF6B7280), fontSize: 12),
+                            ),
+                            if (_isRecalculating)
+                              SizedBox(
+                                width: 20, height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+                              ),
+                          ],
+                        ),
+
+                        // Parada a la que se esta yendo y salto manual a la siguiente
+                        if (_stopLabels.isNotEmpty) ...[
+                          Divider(height: 20, color: colors.border),
+                          Row(
+                            children: [
+                              Icon(
+                                _hasReachedFinalDestination ? Icons.flag : Icons.place,
+                                size: 20,
+                                color: _hasReachedFinalDestination ? AppColors.success : accent,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _hasReachedFinalDestination ? 'Viaje completado' : 'Yendo a',
+                                      style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                                    ),
+                                    Text(
+                                      _hasReachedFinalDestination
+                                        ? 'Has llegado al destino'
+                                        : '${_getCurrentTargetLabel()} (${_currentStopIndex + 1}/${_stopLabels.length})',
+                                      style: TextStyle(
+                                        color: colors.textPrimary,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
-                              if (_stopLabels.isNotEmpty)
-                                Text(
-                                  _hasReachedFinalDestination
-                                      ? 'Has llegado al destino'
-                                      : 'Destino actual: ${_getCurrentTargetLabel()} (${_currentStopIndex + 1}/${_stopLabels.length})',
-                                  style: const TextStyle(color: Color(0xFF6B7280), fontSize: 12),
+                              ),
+                              // Solo se ofrece si queda alguna parada por delante
+                              if (_hasNextStop)
+                                TextButton.icon(
+                                  onPressed: _confirmSkipToNextStop,
+                                  icon: const Icon(Icons.skip_next, size: 18),
+                                  label: const Text('Siguiente'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: accent,
+                                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                                    visualDensity: VisualDensity.compact,
+                                    textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                  ),
                                 ),
                             ],
                           ),
-                        ),
-                        if (_isRecalculating)
-                          const SizedBox(
-                            width: 20, height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF4F46E5)),
-                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -781,11 +1097,11 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
                   right: 0,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: colors.card,
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
+                          color: Colors.black.withValues(alpha: colors.isDark ? 0.5 : 0.1),
                           blurRadius: 15,
                           offset: const Offset(0, -4),
                         ),
@@ -796,8 +1112,8 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Instruccion actual
-                          if (_routeSteps.isNotEmpty && _currentStepIndex < _routeSteps.length)
+                          // Siguiente maniobra
+                          if (_routeSteps.isNotEmpty)
                             Container(
                               width: double.infinity,
                               padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
@@ -806,12 +1122,12 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
                                   Container(
                                     width: 48, height: 48,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF4F46E5).withValues(alpha: 0.1),
+                                      color: accent.withValues(alpha: colors.isDark ? 0.22 : 0.12),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Icon(
-                                      _getManeuverIcon(_routeSteps[_currentStepIndex].type),
-                                      color: const Color(0xFF4F46E5),
+                                      _getManeuverIcon(_routeSteps[_displayStepIndex].type),
+                                      color: accent,
                                       size: 28,
                                     ),
                                   ),
@@ -821,15 +1137,17 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          _routeSteps[_currentStepIndex].instruction,
-                                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                                          _routeSteps[_displayStepIndex].instruction,
+                                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: colors.textPrimary),
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          OrsRoutingService.formatDistance(_routeSteps[_currentStepIndex].distance),
-                                          style: const TextStyle(color: Color(0xFF6B7280), fontSize: 13),
+                                          _distanceToNextManeuver >= 15
+                                              ? 'En ${OrsRoutingService.formatDistance(_distanceToNextManeuver)}'
+                                              : 'Ahora',
+                                          style: TextStyle(color: colors.textSecondary, fontSize: 13),
                                         ),
                                       ],
                                     ),
@@ -837,12 +1155,12 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFF3F4F6),
+                                      color: colors.surfaceLow,
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: Text(
-                                      '${_currentStepIndex + 1}/${_routeSteps.length}',
-                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xFF6B7280)),
+                                      '${_displayStepIndex + 1}/${_routeSteps.length}',
+                                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: colors.textSecondary),
                                     ),
                                   ),
                                 ],
@@ -886,19 +1204,33 @@ class _TravelNavigationScreenState extends State<TravelNavigationScreen> {
                   bottom: 200,
                   child: FloatingActionButton.small(
                     heroTag: 'centerBtn',
-                    backgroundColor: Colors.white,
-                    onPressed: () {
-                      if (_isMapReady && _currentPosition != null) {
-                        setState(() {
-                          _isFollowingUser = true;
-                        });
-                        _mapController.move(_currentPosition!, 16);
-                      }
-                    },
-                    child: Icon(
-                      _isFollowingUser ? Icons.my_location : Icons.location_searching,
-                      color: const Color(0xFF4F46E5),
-                    ),
+                    backgroundColor: colors.card,
+                    tooltip: _isGpsActive ? 'Centrar en mi posición' : 'Reanudar la guía',
+                    onPressed: _isRetryingGps
+                      ? null
+                      : () {
+                          if (!_isGpsActive) {
+                            _retryGps();
+                            return;
+                          }
+                          if (_isMapReady && _currentPosition != null) {
+                            setState(() {
+                              _isFollowingUser = true;
+                            });
+                            _mapController.move(_currentPosition!, 16);
+                          }
+                        },
+                    child: _isRetryingGps
+                      ? SizedBox(
+                          width: 20, height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+                        )
+                      : Icon(
+                          !_isGpsActive
+                              ? Icons.location_disabled
+                              : _isFollowingUser ? Icons.my_location : Icons.location_searching,
+                          color: _isGpsActive ? accent : colors.danger,
+                        ),
                   ),
                 ),
               ],
