@@ -22,3 +22,4 @@ blablaUCMWS/blablaUCM/media/
 .vscode/
 .idea/
 *.iml
+/blablaUCMWS/blablaUCM/secrets

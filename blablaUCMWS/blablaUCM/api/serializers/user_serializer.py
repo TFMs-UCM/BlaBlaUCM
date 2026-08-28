@@ -1,5 +1,9 @@
 from rest_framework import serializers
 from users.models import *
+from api.serializers.base import AuditFieldsMixin
+from users.services.auth_service import EMAIL_DOMAIN_ERROR_MESSAGE, AuthService
+from users.services.exceptions import (EmailAlreadyRegisteredError, EmailDomainNotAllowedError, InvalidUsernameError,
+    UsernameAlreadyTakenError)
 from api.exceptions import CustomAPIException
 from api.errors import ErrorCodes
 import os
@@ -26,6 +30,8 @@ class UserSerializer(serializers.ModelSerializer):
             "profile_picture_url",
             "has_2FA"
         ]
+        # EL email y el 2FA deben ser de solo lectura ya que si no, con un patch se podria cambiar el email y robar la cuenta
+        read_only_fields = ["email", "has_2FA"]
         extra_kwargs = {
             'username': {'validators': []},
             'email': {'validators': []},
@@ -36,16 +42,24 @@ class UserSerializer(serializers.ModelSerializer):
         username = attrs.get('username')
         email = attrs.get('email')
 
-        # Username unique
-        if username and Users.objects.filter(username=username).exists():
+        if username:
+            try:
+                AuthService.assert_username_is_acceptable(username)
+            except InvalidUsernameError:
+                raise CustomAPIException(
+                    code=ErrorCodes.INVALID_USERNAME,
+                    message=USERNAME_ERROR_MESSAGE,
+                    status_code=400
+                )
+
+        if username and AuthService.username_is_taken(username, excluding=self.instance):
             raise CustomAPIException(
                 code=ErrorCodes.USERNAME_ALREADY_EXISTS,
                 message="El nombre de usuario ya esta en uso",
                 status_code=409
             )
 
-        # Email unique
-        if email and Users.objects.filter(email=email).exists():
+        if email and AuthService.email_is_taken(email, excluding=self.instance):
             raise CustomAPIException(
                 code=ErrorCodes.EMAIL_ALREADY_EXISTS,
                 message="El correo electrónico ya esta en uso",
@@ -60,6 +74,18 @@ class UserSerializer(serializers.ModelSerializer):
             filename = os.path.basename(obj.profile_picture.name)
             return f"/api/v1/media/profile_pics/{filename}"
         return None
+
+# Vista publica de un usuario, la que se manda cuando aparece dentro de otra cosa
+class PublicUserSerializer(UserSerializer):
+    class Meta(UserSerializer.Meta):
+        fields = [
+            "id",
+            "username",
+            "user_type",
+            "profile_picture_url",
+        ]
+        read_only_fields = []
+        extra_kwargs = {}
 
 # Serializer para el resgistro de usuarios, incluye validacion de la contraseña y su confirmacion, que le email y nombre de usuario sean
 # unicos, y que este validado 
@@ -94,24 +120,31 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
                 code=ErrorCodes.PASSWORD_MISMATCH,
                 message="La contraseña y la confirmación no coinciden"
             )
-            
-        user = Users.objects.filter(username=attrs['username'], is_deleted=False)
-        # El usuario debe ser unico
-        if user.exists():
-            if user.filter(is_verify=False).exists():
-                logger.info("User with same username: {username}, exists but not verified")
-                user.delete()
-            else:
-                logger.warning("User with same username: {username}, already registered")
-                raise CustomAPIException(
-                    code=ErrorCodes.USERNAME_ALREADY_EXISTS,
-                    message="El nombre de usuario ya esta en uso",
-                    status_code=409
-                )
+        AuthService.assert_password_is_acceptable(attrs['password'])
 
-        # El email debe ser unico
-        if Users.objects.filter(email=attrs['email'], is_deleted=False).exists():
-            logger.warning("User with same email: {email}, already registered")
+        try:
+            AuthService.prepare_registration(attrs['username'], attrs['email'])
+        except InvalidUsernameError:
+            # El nombre de usuario no cumple el formato admitido
+            raise CustomAPIException(
+                code=ErrorCodes.INVALID_USERNAME,
+                message=USERNAME_ERROR_MESSAGE,
+                status_code=400
+            )
+        except EmailDomainNotAllowedError:
+            # El correo no es de un dominio admitido
+            raise CustomAPIException(
+                code=ErrorCodes.EMAIL_DOMAIN_NOT_ALLOWED,
+                message=EMAIL_DOMAIN_ERROR_MESSAGE,
+                status_code=400
+            )
+        except UsernameAlreadyTakenError:
+            raise CustomAPIException(
+                code=ErrorCodes.USERNAME_ALREADY_EXISTS,
+                message="El nombre de usuario ya esta en uso",
+                status_code=409
+            )
+        except EmailAlreadyRegisteredError:
             raise CustomAPIException(
                 code=ErrorCodes.EMAIL_ALREADY_EXISTS,
                 message="El correo electrónico ya esta en uso",
@@ -140,56 +173,56 @@ class ProfilePicSerializer(serializers.ModelSerializer):
         }
 
 # Serializer para el modelo UserType, que contiene los tipos de usuario disponibles
-class UserTypeSerializer(serializers.ModelSerializer):
+class UserTypeSerializer(AuditFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = UserType
         # Se incluyen todos los campos ya que no hay informacion sensible
         fields = ("__all__")
 
 # Serializer para el modelo Notifications, que contiene las notificaciones de los usuarios
-class NotificationsSerializer(serializers.ModelSerializer):
+class NotificationsSerializer(AuditFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = Notifications
         # Se incluyen todos los campos ya que no hay informacion sensible
         fields = "__all__"
 
 # Serializer para el modelo Device, que contiene los dispositivos registrados para notificaciones push
-class DeviceSerializer(serializers.ModelSerializer):
+class DeviceSerializer(AuditFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = Device
         fields = "__all__"
         read_only_fields = ("id_user",)
 
 # Serializer para el modelo PrefTypes, que contiene los tipos de preferencias disponibles
-class PrefTypesSerializer(serializers.ModelSerializer):
+class PrefTypesSerializer(AuditFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = PrefTypes
         # Se incluyen todos los campos ya que no hay informacion sensible
         fields = "__all__"
 
 # Serializer para el modelo Preferences, que contiene las preferencias de los usuarios
-class PreferencesSerializer(serializers.ModelSerializer):
+class PreferencesSerializer(AuditFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = Preferences
         # Se incluyen todos los campos ya que no hay informacion sensible
         fields = "__all__"
 
 # Serializer para el modelo Criteria, que contiene los criterios de valoración de los conductores
-class CriteriaSerializer(serializers.ModelSerializer):
+class CriteriaSerializer(AuditFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = Criteria
         # Se incluyen todos los campos ya que no hay informacion sensible
         fields = "__all__"
 
 # Serializer para el modelo DriverRatings, que contiene las valoraciones de los conductores por parte de los usuarios
-class DriverRatingsSerializer(serializers.ModelSerializer):
+class DriverRatingsSerializer(AuditFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = DriverRatings
         # Se incluyen todos los campos ya que no hay informacion sensible
         fields = "__all__"
 
 # Serializer para el modelo EnvTypes, que contiene los tipos de distintivos ambientales disponibles
-class EnvTypesSerializer(serializers.ModelSerializer):
+class EnvTypesSerializer(AuditFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = EnvTypes
         # Se incluyen todos los campos ya que no hay informacion sensible

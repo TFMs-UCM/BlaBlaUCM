@@ -3,6 +3,7 @@ from typing import Optional
 
 import firebase_admin
 from decouple import config
+from django.utils import timezone
 from firebase_admin import credentials, messaging
 
 logger = logging.getLogger(__name__)
@@ -40,8 +41,10 @@ class PushNotification:
             try:
                 messaging.send(message)
             except firebase_admin.exceptions.NotFoundError:
-                # Si el token de FCM es invalido, se elimina el dispositivo de la base de datos
-                logger.info(f"FCM token invalid deleting from database {device.id}")
-                device.delete()
+                # Si el token de FCM ya no es valido, se marca el dispositivo como borrado
+                logger.info(f"FCM token invalid, marking device as deleted {device.id}")
+                device.is_deleted = True
+                device.deleted_at = timezone.now()
+                device.save()
             except Exception as e:
                 logger.error(f"Error sending push notification to device {device.id}: {str(e)}")

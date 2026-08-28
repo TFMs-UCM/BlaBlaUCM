@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from api.base_models import BaseModel
 from django.template.defaultfilters import date as django_date
 from travels.models import RequestTravels
 from users.models import Users
@@ -57,7 +58,7 @@ def get_member_users(travel):
 
 
 # Modelo del chat de un viaje
-class Chat(models.Model):
+class Chat(BaseModel):
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -71,11 +72,6 @@ class Chat(models.Model):
         db_column='id_travel',
         related_name='chat'
     )
-
-    is_deleted = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'chat'
@@ -101,7 +97,7 @@ class Chat(models.Model):
 
 
 # Modelo de un mensaje dentro del chat de un viaje
-class ChatMessage(models.Model):
+class ChatMessage(BaseModel):
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -123,11 +119,6 @@ class ChatMessage(models.Model):
     )
     content = models.TextField()
 
-    is_deleted = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-
     class Meta:
         db_table = 'chat_message'
         ordering = ['created_at']
@@ -141,7 +132,7 @@ class ChatMessage(models.Model):
 
 # Modelo para representar las relaciones que hay entre un usuario y el chat de un viaje
 # Almacena informacion como si el chat esta muteado para este usaurio, archivado...
-class ChatMembership(models.Model):
+class ChatMembership(BaseModel):
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -165,11 +156,6 @@ class ChatMembership(models.Model):
     is_muted = models.BooleanField(default=False)
     archived_at = models.DateTimeField(null=True, blank=True)
     is_removed = models.BooleanField(default=False)
-
-    is_deleted = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'chat_membership'

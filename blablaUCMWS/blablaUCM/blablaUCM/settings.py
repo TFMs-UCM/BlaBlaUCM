@@ -14,7 +14,6 @@ from pathlib import Path
 import os
 from decouple import config
 import logging
-from datetime import datetime
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -31,7 +30,26 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', cast=lambda v: v.split(','))
 
-CORS_ALLOW_ALL_ORIGINS = True
+ALLOWED_DOMAINS = config('ALLOWED_DOMAINS',default='*',cast=lambda v: [d.strip().lower().lstrip('@') for d in v.split(',') if d.strip()])
+
+# Con True se aceptan peticiones de cualquier origen y CORS_ALLOWED_ORIGINS queda ignorada
+CORS_ALLOW_ALL_ORIGINS = config('CORS_ALLOW_ALL_ORIGINS', default=True, cast=bool)
+
+# Ruta del panel de administracion. En /admin/ queda un señuelo asi que el panel real tiene que estar en otro sitio 
+ADMIN_URL = config('ADMIN_URL', default='panel-interno/')
+
+# Se normaliza para que valga tanto "panel/" como "/panel" o "panel"
+ADMIN_URL = ADMIN_URL.strip('/') + '/'
+
+# Si el panel se quedara en /admin/ chocaria con el señuelo y una de las dos
+# rutas se solapa con la otra, por lo que no se permite tener ambas en /admin/
+if ADMIN_URL == 'admin/':
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured(
+        "ADMIN_URL no puede ser 'admin/': esa ruta la ocupa el señuelo. "
+        "Elige otra en el .env."
+    )
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -58,6 +76,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -65,6 +84,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django.middleware.csp.ContentSecurityPolicyMiddleware',
 ]
 
 ROOT_URLCONF = 'blablaUCM.urls'
@@ -72,7 +92,8 @@ ROOT_URLCONF = 'blablaUCM.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        # Plantillas del proyecto que no pertenecen a ninguna app
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -103,12 +124,65 @@ else:
         }
     }
 
+# La limitacion de peticiones lleva su cuenta en la cache, asi que la cache tiene
+# que ser compartida entre procesos, por lo que es necesario usar Redis
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+        }
+    }
+else: # Sin Redis, la cache es local y se usa un solo proceso
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'blablaucm-local',
+        }
+    }
+
+
+# Limitacion de peticiones de los endpoints abiertos, se desactiva con THROTTLE_ENABLED=False
+THROTTLE_ENABLED = config('THROTTLE_ENABLED', cast=bool, default=True)
 
 REST_FRAMEWORK = {
 
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "api.authentication.UsersJWTAuthentication",
     ),
+
+    # Un unico formato de error para toda la API
+    "EXCEPTION_HANDLER": "api.exception_handler.unified_exception_handler",
+
+    # Solo actua sobre las vistas que declaran throttle_scope
+    "DEFAULT_THROTTLE_CLASSES": (
+        "rest_framework.throttling.ScopedRateThrottle",
+    ),
+
+    # Numero de proxies de confianza entre el cliente y esta aplicacion
+    # Si solo se utiliza Caddy, hay que poner NUM_PROXIES=1, si se ponen mas hay que ajustarlo
+    "NUM_PROXIES": config('NUM_PROXIES', default=1, cast=int),
+
+    "DEFAULT_THROTTLE_RATES": {
+        # Envio del codigo de verificacion al correo de la cuenta
+        "verification_email": config('THROTTLE_VERIFICATION_EMAIL', default='5/hour') if THROTTLE_ENABLED else None,
+        # Comprobacion del codigo, limita el probar codigos a lo bruto
+        "verify_code": config('THROTTLE_VERIFY_CODE', default='10/hour') if THROTTLE_ENABLED else None,
+        # Limite de peticiones de segundo factor
+        "two_factor": config('THROTTLE_TWO_FACTOR', default='10/hour') if THROTTLE_ENABLED else None,
+        # Consultas de existe este usuario / correo, limita la enumeracion
+        "user_lookup": config('THROTTLE_USER_LOOKUP', default='30/hour') if THROTTLE_ENABLED else None,
+        # Inicio de sesion, es la puerta de entrada y no tenia ningun limite
+        "login": config('THROTTLE_LOGIN', default='10/minute') if THROTTLE_ENABLED else None,
+        # Limite de peticiones de validacion de codigo de verificacion
+        "validation_code": config('THROTTLE_VALIDATION_CODE', default='20/minute') if THROTTLE_ENABLED else None,
+        # Limite de peticiones de entrada y alta con un proveedor externo (Google)
+        "oauth_login": config('THROTTLE_OAUTH_LOGIN', default='20/minute') if THROTTLE_ENABLED else None,
+        # Limite de peticiones de alta con usuario y contraseña
+        "register": config('THROTTLE_REGISTER', default='10/hour') if THROTTLE_ENABLED else None,
+        # limite de peticiones de refresco de token
+        "token_refresh": config('THROTTLE_TOKEN_REFRESH', default='60/hour') if THROTTLE_ENABLED else None,
+    },
 
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
@@ -124,6 +198,12 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 10,
 }
 
+# Valores para proteger la documentacion de la API, solo los administradores pueden verla
+SPECTACULAR_SETTINGS = {
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.IsAdminUser'],
+    'SERVE_AUTHENTICATION': ['rest_framework.authentication.SessionAuthentication'],
+}
+
 # CORS Configuration
 CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
@@ -132,6 +212,13 @@ CORS_ALLOWED_ORIGINS = config(
 )
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Origenes en los que Django se fia de la cookie CSRF
+CSRF_TRUSTED_ORIGINS = config(
+    'CSRF_TRUSTED_ORIGINS',
+    default='',
+    cast=lambda v: [o.strip() for o in v.split(',') if o.strip()]
+)
 
 CORS_ALLOW_METHODS = [
     "GET",
@@ -161,6 +248,21 @@ EMAIL_USE_TLS = config('EMAIL_USE_TLS', cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
 
+# Plazo maximo para hablar con el servidor de correo, sin esto, puede bloquearse el proceso indefinidamente
+EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=10, cast=int)
+
+# Email al que se avisa, si esta vacio, no se manda ningun correo, solo se registra en el log
+HONEYPOT_NOTIFY_EMAIL = config('HONEYPOT_NOTIFY_EMAIL', default=EMAIL_HOST_USER)
+
+# Limite de tiempo entre avisos de la misma IP
+HONEYPOT_EMAIL_COOLDOWN = config('HONEYPOT_EMAIL_COOLDOWN', default=3600, cast=int)
+
+# Limite global de avisos por hora, para no saturar el correo ante muchos bots
+HONEYPOT_MAX_EMAILS_HOUR = config('HONEYPOT_MAX_EMAILS_HOUR', default=20, cast=int)
+
+# Por defecto solo se notifica con un POST, si se pone a True, se notifica tambien al acceder a la pagina
+HONEYPOT_NOTIFY_ON_GET = config('HONEYPOT_NOTIFY_ON_GET', default=False, cast=bool)
+
 
 DATABASES = {
     'default': {
@@ -170,8 +272,24 @@ DATABASES = {
         'PASSWORD': config('DB_PASSWORD'),
         'HOST': config('DB_HOST'),
         'PORT': config('DB_PORT'),
+        # Reutilizar la conexion entre peticiones
+        'CONN_MAX_AGE': config('DB_CONN_MAX_AGE', default=0, cast=int),
     }
 }
+
+# Modo TLS contra la BBDD
+DB_SSLMODE = config('DB_SSLMODE', default='')
+if DB_SSLMODE:
+    DATABASES['default']['OPTIONS'] = {'sslmode': DB_SSLMODE}
+
+DB_TEST_TEMPLATE = config('DB_TEST_TEMPLATE', default='')
+if DB_TEST_TEMPLATE:
+    DATABASES['default']['TEST'] = {'TEMPLATE': DB_TEST_TEMPLATE}
+
+# Salida de los tests en formato JUnit XML
+TEST_OUTPUT_DIR = config('TEST_OUTPUT_DIR', default='test-results')
+TEST_OUTPUT_FILE_NAME = config('TEST_OUTPUT_FILE_NAME', default='junit.xml')
+TEST_OUTPUT_VERBOSE = config('TEST_OUTPUT_VERBOSE', default=1, cast=int)
 
 
 MEDIA_ROOT = os.path.join(BASE_DIR, config('MEDIA_PATH', default='media'))
@@ -186,6 +304,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {'min_length': 6},
     },
     {
         'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
@@ -213,6 +332,14 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+    },
+}
 
 # HTTPS/SSL Settings for Production
 # These are disabled by default for development, enable in production via .env
@@ -222,11 +349,13 @@ CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
 SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=0, cast=int)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=False, cast=bool)
 SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=False, cast=bool)
-SECURE_BROWSER_XSS_FILTER = True
-SECURE_CONTENT_SECURITY_POLICY = {
-    "default-src": ("'self'",),
+
+SECURE_CSP = {
+    "default-src": ["'self'"],
+    "style-src": ["'self'", "'unsafe-inline'"],
+    "script-src": ["'self'", "'unsafe-inline'"],
+    "img-src": ["'self'", "data:"],
 }
-# This header tells Django to trust the X-Forwarded-Proto header from Nginx
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # JWT Configuration
@@ -273,6 +402,17 @@ SIMPLE_JWT = {
 # Logging configuration
 LOGS_PATH = config('LOGS_PATH', default=BASE_DIR / 'logs')
 LOGS_NAME = config('LOGS_NAME', default='BlaBlaUCM')
+
+# El directorio puede no existir en una nueva instalacion
+os.makedirs(LOGS_PATH, exist_ok=True)
+
+# Nivel de registro
+LOG_LEVEL = config('LOG_LEVEL', default='DEBUG')
+
+# Tamaño maximo de cada fichero y cuantos historicos se guardan
+LOG_MAX_BYTES = config('LOG_MAX_BYTES', default=10 * 1024 * 1024, cast=int)
+LOG_BACKUP_COUNT = config('LOG_BACKUP_COUNT', default=10, cast=int)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -288,15 +428,18 @@ LOGGING = {
     },
     'handlers': {
         'file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(LOGS_PATH, f"{LOGS_NAME}_{datetime.now().strftime('%Y_%m_%d')}.log"),
+            'level': LOG_LEVEL,
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': os.path.join(LOGS_PATH, f'{LOGS_NAME}.log'),
+            'maxBytes': LOG_MAX_BYTES,
+            'backupCount': LOG_BACKUP_COUNT,
+            'encoding': 'utf-8',
             'formatter': 'verbose',
         },
     },
     'root': {
         'handlers': ['file'],
-        'level': 'DEBUG',
+        'level': LOG_LEVEL,
     },
 }
 

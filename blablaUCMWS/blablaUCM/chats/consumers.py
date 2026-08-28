@@ -5,10 +5,10 @@ from collections import defaultdict
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.core.exceptions import ValidationError
-from django.db.models import Q
 
 from travels.models import Travel
-from chats.models import Chat, ChatMessage, ChatMembership, user_is_member, get_member_users, chat_display_name
+from chats.models import Chat, user_is_member, chat_display_name
+from chats.services.chat_service import ChatService
 from services.push.push_service import PushNotification
 
 logger = logging.getLogger(__name__)
@@ -129,30 +129,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
     # Funcion para guardar un mensaje en la base de datos
     @database_sync_to_async
     def save_message(self, content):
-        state_code = Travel.objects.filter(pk=self.travel_id).values_list('state', flat=True).first()
-        if state_code == 'fnd': # Se valida que el viaje no haya finalizado
-            return None
-        return ChatMessage.objects.create(chat=self.chat, user=self.user, content=content)
+        return ChatService.save_message(self.travel_id, self.chat, self.user, content)
 
     # Envia una notificacion push del mensaje a los miembros del chat que no lo tienen abierto
     @database_sync_to_async
     def notify_absent_members(self, content):
         present = set(_chat_presence.get(str(self.chat.id), set()))
-        sender_id = str(self.user.id)
 
-        # Los usuarios que tienen el chat archivado o silenciado no reciben el push
-        excluded_ids = set(
-            str(uid) for uid in ChatMembership.objects.filter(
-                chat=self.chat,
-            ).filter(
-                Q(is_muted=True) | Q(is_removed=True)
-            ).values_list('user_id', flat=True)
-        )
-        # Se envia el mensaje a cada uno de los miembros
-        for member in get_member_users(self.travel):
+        # El servicio decide a quien hay que avisar, aqui solo se envia
+        for member in ChatService.members_to_notify(self.chat, self.travel, self.user, present):
             member_id = str(member.id)
-            if member_id == sender_id or member_id in present or member_id in excluded_ids:
-                continue
             try:
                 PushNotification.send_to_user(
                     user=member,
