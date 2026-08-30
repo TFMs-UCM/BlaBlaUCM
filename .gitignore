@@ -23,3 +23,5 @@ blablaUCMWS/blablaUCM/media/
 .idea/
 *.iml
 /blablaUCMWS/blablaUCM/secrets
+/blablaUCMWS/blablaUCM/logs
+blablaUCMWS/blablaUCM/.coverage

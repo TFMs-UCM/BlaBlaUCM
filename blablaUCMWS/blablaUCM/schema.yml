@@ -3,47 +3,173 @@ info:
   title: ''
   version: 0.0.0
 paths:
+  /api/v1/auth/google/login/:
+    post:
+      operationId: auth_google_login_create
+      description: |-
+        Login con Google para usuarios ya registrados.
+        Recibe id_token de Google y devuelve JWT si el usuario existe.
+      tags:
+      - auth
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/google/register/:
+    post:
+      operationId: auth_google_register_create
+      description: |-
+        Registro con Google. Recibe id_token, el nombre de usuario y el tipo de usuario, opcionalmente el segundo apellido.
+        Crea el usuario y devuelve el token JWT con los datos del usuario si el registro es exitoso, o error en caso contrario.
+      tags:
+      - auth
+      security:
+      - {}
+      responses:
+        '200':
+          description: No response body
   /api/v1/auth/refresh/:
     post:
       operationId: auth_refresh_create
-      description: |-
-        Takes a refresh type JSON web token and returns an access type JSON web
-        token if the refresh token is valid.
+      description: Endpoint para pedir el refresh token, no requiere de autenticacion
+        previa.
       tags:
       - auth
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TokenRefresh'
+              $ref: '#/components/schemas/CustomTokenRefresh'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/TokenRefresh'
+              $ref: '#/components/schemas/CustomTokenRefresh'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/TokenRefresh'
+              $ref: '#/components/schemas/CustomTokenRefresh'
         required: true
+      security:
+      - {}
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokenRefresh'
+                $ref: '#/components/schemas/CustomTokenRefresh'
           description: ''
+  /api/v1/chats/:
+    get:
+      operationId: chats_retrieve
+      description: |-
+        Endpoint GET /chats/
+        Se le pasa como parametro opcional archived=true para obtener solo los chats archivados.
+        Devuelve los chats de los viajes en los que participa el usuario
+      tags:
+      - chats
+      responses:
+        '200':
+          description: No response body
+  /api/v1/chats/{id}/:
+    delete:
+      operationId: chats_destroy
+      description: |-
+        Endpoint DELETE /chats/{travel_id}/
+        El usuario sale del chat de forma permanente.
+        El conductor solo puede salir del chat cuando el viaje ha finalizado.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - chats
+      responses:
+        '204':
+          description: No response body
+  /api/v1/chats/{id}/archive/:
+    post:
+      operationId: chats_archive_create
+      description: |-
+        Endpoint POST /chats/{travel_id}/archive/
+        Archiva el chat que mueve a la seccion de archivados
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - chats
+      responses:
+        '200':
+          description: No response body
+  /api/v1/chats/{id}/messages/:
+    get:
+      operationId: chats_messages_retrieve
+      description: |-
+        Endpoint GET /chats/{travel_id}/messages/
+        Devuelve el historial de mensajes del chat del viaje indicado y si se pueden enviar mensajes
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - chats
+      responses:
+        '200':
+          description: No response body
+  /api/v1/chats/{id}/mute/:
+    post:
+      operationId: chats_mute_create
+      description: |-
+        Endpoint POST /chats/{travel_id}/mute/
+        Se pasa en el body el parametro: {"muted": true|false} para indicar si se quiere silenciar o reactivar las notificaciones
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - chats
+      responses:
+        '200':
+          description: No response body
+  /api/v1/chats/{id}/unarchive/:
+    post:
+      operationId: chats_unarchive_create
+      description: |-
+        Endpoint POST /chats/{travel_id}/unarchive/
+        Desarchiva el chat que lo devuelve a la lista principal.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - chats
+      responses:
+        '200':
+          description: No response body
   /api/v1/criteria/:
     get:
       operationId: criteria_list
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - criteria
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -51,145 +177,159 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedCriteriaList'
           description: ''
-    post:
-      operationId: criteria_create
+  /api/v1/criteria/{id}/:
+    get:
+      operationId: criteria_retrieve
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: Un valor de entero único que identifique este criteria.
+        required: true
       tags:
       - criteria
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Criteria'
+          description: ''
+  /api/v1/devices/:
+    get:
+      operationId: devices_list
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      tags:
+      - devices
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDeviceList'
+          description: ''
+    post:
+      operationId: devices_create
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
+      tags:
+      - devices
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Criteria'
+              $ref: '#/components/schemas/Device'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/Criteria'
+              $ref: '#/components/schemas/Device'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/Criteria'
+              $ref: '#/components/schemas/Device'
         required: true
-      security:
-      - jwtAuth: []
       responses:
         '201':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Criteria'
+                $ref: '#/components/schemas/Device'
           description: ''
-  /api/v1/criteria/{id}/:
+  /api/v1/devices/{id}/:
     get:
-      operationId: criteria_retrieve
+      operationId: devices_retrieve
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this criteria.
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este device.
         required: true
       tags:
-      - criteria
-      security:
-      - jwtAuth: []
+      - devices
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Criteria'
-          description: ''
-    put:
-      operationId: criteria_update
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this criteria.
-        required: true
-      tags:
-      - criteria
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Criteria'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Criteria'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Criteria'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Criteria'
+                $ref: '#/components/schemas/Device'
           description: ''
     patch:
-      operationId: criteria_partial_update
+      operationId: devices_partial_update
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this criteria.
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este device.
         required: true
       tags:
-      - criteria
+      - devices
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PatchedCriteria'
+              $ref: '#/components/schemas/PatchedDevice'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/PatchedCriteria'
+              $ref: '#/components/schemas/PatchedDevice'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/PatchedCriteria'
-      security:
-      - jwtAuth: []
+              $ref: '#/components/schemas/PatchedDevice'
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Criteria'
+                $ref: '#/components/schemas/Device'
           description: ''
     delete:
-      operationId: criteria_destroy
+      operationId: devices_destroy
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this criteria.
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este device.
         required: true
       tags:
-      - criteria
-      security:
-      - jwtAuth: []
+      - devices
       responses:
         '204':
           description: No response body
   /api/v1/driverratings/:
     get:
       operationId: driverratings_list
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - driverratings
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -199,6 +339,8 @@ paths:
           description: ''
     post:
       operationId: driverratings_create
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       tags:
       - driverratings
       requestBody:
@@ -213,8 +355,6 @@ paths:
             schema:
               $ref: '#/components/schemas/DriverRatings'
         required: true
-      security:
-      - jwtAuth: []
       responses:
         '201':
           content:
@@ -225,51 +365,18 @@ paths:
   /api/v1/driverratings/{id_rating}/:
     get:
       operationId: driverratings_retrieve
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id_rating
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this driver ratings.
+        description: Un Cadena UUID que identifique este driver ratings.
         required: true
       tags:
       - driverratings
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DriverRatings'
-          description: ''
-    put:
-      operationId: driverratings_update
-      parameters:
-      - in: path
-        name: id_rating
-        schema:
-          type: string
-          format: uuid
-        description: A UUID string identifying this driver ratings.
-        required: true
-      tags:
-      - driverratings
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DriverRatings'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/DriverRatings'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/DriverRatings'
-        required: true
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -279,13 +386,15 @@ paths:
           description: ''
     patch:
       operationId: driverratings_partial_update
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id_rating
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this driver ratings.
+        description: Un Cadena UUID que identifique este driver ratings.
         required: true
       tags:
       - driverratings
@@ -300,8 +409,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PatchedDriverRatings'
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -311,35 +418,36 @@ paths:
           description: ''
     delete:
       operationId: driverratings_destroy
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id_rating
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this driver ratings.
+        description: Un Cadena UUID que identifique este driver ratings.
         required: true
       tags:
       - driverratings
-      security:
-      - jwtAuth: []
       responses:
         '204':
           description: No response body
   /api/v1/envtypes/:
     get:
       operationId: envtypes_list
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - envtypes
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -347,45 +455,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedEnvTypesList'
           description: ''
-    post:
-      operationId: envtypes_create
-      tags:
-      - envtypes
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EnvTypes'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/EnvTypes'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/EnvTypes'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EnvTypes'
-          description: ''
   /api/v1/envtypes/{id_type}/:
     get:
       operationId: envtypes_retrieve
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       parameters:
       - in: path
         name: id_type
         schema:
           type: integer
-        description: A unique integer value identifying this env types.
+        description: Un valor de entero único que identifique este env types.
         required: true
       tags:
       - envtypes
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -393,91 +477,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/EnvTypes'
           description: ''
-    put:
-      operationId: envtypes_update
-      parameters:
-      - in: path
-        name: id_type
-        schema:
-          type: integer
-        description: A unique integer value identifying this env types.
-        required: true
-      tags:
-      - envtypes
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/EnvTypes'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/EnvTypes'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/EnvTypes'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EnvTypes'
-          description: ''
-    patch:
-      operationId: envtypes_partial_update
-      parameters:
-      - in: path
-        name: id_type
-        schema:
-          type: integer
-        description: A unique integer value identifying this env types.
-        required: true
-      tags:
-      - envtypes
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedEnvTypes'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedEnvTypes'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedEnvTypes'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/EnvTypes'
-          description: ''
-    delete:
-      operationId: envtypes_destroy
-      parameters:
-      - in: path
-        name: id_type
-        schema:
-          type: integer
-        description: A unique integer value identifying this env types.
-        required: true
-      tags:
-      - envtypes
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
   /api/v1/login/:
     post:
       operationId: login_create
-      description: |-
-        Custom login view that uses the CustomTokenObtainPairSerializer.
-        This allows users to login with either email or username.
+      description: Endpoint para iniciar sesión con email o nombre de usuario, no
+        requiere autenticacion previa.
       tags:
       - login
       requestBody:
@@ -505,10 +509,8 @@ paths:
     get:
       operationId: media_profile_pics_retrieve
       description: |-
-        Serve profile pictures only to authenticated users.
-        This protects profile pictures from public access.
-
-        Usage: GET /api/v1/media/profile_pics/{filename}
+        Endpoint para servir las imagenes de perfil, es necesario la autenticacion previa
+        Uso: GET /api/v1/media/profile_pics/{filename}
       parameters:
       - in: path
         name: filename
@@ -517,25 +519,23 @@ paths:
         required: true
       tags:
       - media
-      security:
-      - jwtAuth: []
       responses:
         '200':
           description: No response body
   /api/v1/notifications/:
     get:
       operationId: notifications_list
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - notifications
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -545,6 +545,8 @@ paths:
           description: ''
     post:
       operationId: notifications_create
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       tags:
       - notifications
       requestBody:
@@ -559,8 +561,6 @@ paths:
             schema:
               $ref: '#/components/schemas/Notifications'
         required: true
-      security:
-      - jwtAuth: []
       responses:
         '201':
           content:
@@ -571,51 +571,18 @@ paths:
   /api/v1/notifications/{id}/:
     get:
       operationId: notifications_retrieve
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this notifications.
+        description: Un Cadena UUID que identifique este notifications.
         required: true
       tags:
       - notifications
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Notifications'
-          description: ''
-    put:
-      operationId: notifications_update
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          format: uuid
-        description: A UUID string identifying this notifications.
-        required: true
-      tags:
-      - notifications
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Notifications'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Notifications'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Notifications'
-        required: true
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -625,13 +592,15 @@ paths:
           description: ''
     patch:
       operationId: notifications_partial_update
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this notifications.
+        description: Un Cadena UUID que identifique este notifications.
         required: true
       tags:
       - notifications
@@ -646,8 +615,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PatchedNotifications'
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -657,35 +624,36 @@ paths:
           description: ''
     delete:
       operationId: notifications_destroy
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this notifications.
+        description: Un Cadena UUID que identifique este notifications.
         required: true
       tags:
       - notifications
-      security:
-      - jwtAuth: []
       responses:
         '204':
           description: No response body
   /api/v1/pickuppoints/:
     get:
       operationId: pickuppoints_list
+      description: |-
+        Base de los ViewSets de lo que depende de un viaje: puntos de recogida y tipos
+        de usuario denegados. Solo el creador del viaje puede tocarlos.
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - pickuppoints
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -695,6 +663,9 @@ paths:
           description: ''
     post:
       operationId: pickuppoints_create
+      description: |-
+        Base de los ViewSets de lo que depende de un viaje: puntos de recogida y tipos
+        de usuario denegados. Solo el creador del viaje puede tocarlos.
       tags:
       - pickuppoints
       requestBody:
@@ -709,8 +680,6 @@ paths:
             schema:
               $ref: '#/components/schemas/PickUpPoint'
         required: true
-      security:
-      - jwtAuth: []
       responses:
         '201':
           content:
@@ -721,18 +690,19 @@ paths:
   /api/v1/pickuppoints/{id_point}/:
     get:
       operationId: pickuppoints_retrieve
+      description: |-
+        Base de los ViewSets de lo que depende de un viaje: puntos de recogida y tipos
+        de usuario denegados. Solo el creador del viaje puede tocarlos.
       parameters:
       - in: path
         name: id_point
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this pick up points.
+        description: Un Cadena UUID que identifique este pick up points.
         required: true
       tags:
       - pickuppoints
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -742,13 +712,16 @@ paths:
           description: ''
     put:
       operationId: pickuppoints_update
+      description: |-
+        Base de los ViewSets de lo que depende de un viaje: puntos de recogida y tipos
+        de usuario denegados. Solo el creador del viaje puede tocarlos.
       parameters:
       - in: path
         name: id_point
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this pick up points.
+        description: Un Cadena UUID que identifique este pick up points.
         required: true
       tags:
       - pickuppoints
@@ -764,8 +737,6 @@ paths:
             schema:
               $ref: '#/components/schemas/PickUpPoint'
         required: true
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -775,13 +746,16 @@ paths:
           description: ''
     patch:
       operationId: pickuppoints_partial_update
+      description: |-
+        Base de los ViewSets de lo que depende de un viaje: puntos de recogida y tipos
+        de usuario denegados. Solo el creador del viaje puede tocarlos.
       parameters:
       - in: path
         name: id_point
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this pick up points.
+        description: Un Cadena UUID que identifique este pick up points.
         required: true
       tags:
       - pickuppoints
@@ -796,8 +770,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PatchedPickUpPoint'
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -807,35 +779,36 @@ paths:
           description: ''
     delete:
       operationId: pickuppoints_destroy
+      description: |-
+        Base de los ViewSets de lo que depende de un viaje: puntos de recogida y tipos
+        de usuario denegados. Solo el creador del viaje puede tocarlos.
       parameters:
       - in: path
         name: id_point
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this pick up points.
+        description: Un Cadena UUID que identifique este pick up points.
         required: true
       tags:
       - pickuppoints
-      security:
-      - jwtAuth: []
       responses:
         '204':
           description: No response body
   /api/v1/preferences/:
     get:
       operationId: preferences_list
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - preferences
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -845,6 +818,8 @@ paths:
           description: ''
     post:
       operationId: preferences_create
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       tags:
       - preferences
       requestBody:
@@ -859,8 +834,6 @@ paths:
             schema:
               $ref: '#/components/schemas/Preferences'
         required: true
-      security:
-      - jwtAuth: []
       responses:
         '201':
           content:
@@ -871,51 +844,18 @@ paths:
   /api/v1/preferences/{id_pref}/:
     get:
       operationId: preferences_retrieve
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id_pref
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this preferences.
+        description: Un Cadena UUID que identifique este preferences.
         required: true
       tags:
       - preferences
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Preferences'
-          description: ''
-    put:
-      operationId: preferences_update
-      parameters:
-      - in: path
-        name: id_pref
-        schema:
-          type: string
-          format: uuid
-        description: A UUID string identifying this preferences.
-        required: true
-      tags:
-      - preferences
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Preferences'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Preferences'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Preferences'
-        required: true
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -925,13 +865,15 @@ paths:
           description: ''
     patch:
       operationId: preferences_partial_update
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id_pref
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this preferences.
+        description: Un Cadena UUID que identifique este preferences.
         required: true
       tags:
       - preferences
@@ -946,8 +888,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PatchedPreferences'
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -957,35 +897,36 @@ paths:
           description: ''
     delete:
       operationId: preferences_destroy
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id_pref
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this preferences.
+        description: Un Cadena UUID que identifique este preferences.
         required: true
       tags:
       - preferences
-      security:
-      - jwtAuth: []
       responses:
         '204':
           description: No response body
   /api/v1/preftypes/:
     get:
       operationId: preftypes_list
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - preftypes
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -993,45 +934,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedPrefTypesList'
           description: ''
-    post:
-      operationId: preftypes_create
-      tags:
-      - preftypes
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PrefTypes'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PrefTypes'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PrefTypes'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PrefTypes'
-          description: ''
   /api/v1/preftypes/{id_pref}/:
     get:
       operationId: preftypes_retrieve
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       parameters:
       - in: path
         name: id_pref
         schema:
           type: integer
-        description: A unique integer value identifying this pref types.
+        description: Un valor de entero único que identifique este pref types.
         required: true
       tags:
       - preftypes
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -1039,103 +956,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/PrefTypes'
           description: ''
-    put:
-      operationId: preftypes_update
-      parameters:
-      - in: path
-        name: id_pref
-        schema:
-          type: integer
-        description: A unique integer value identifying this pref types.
-        required: true
+  /api/v1/refresh/:
+    post:
+      operationId: refresh_create
+      description: Endpoint para pedir el refresh token, no requiere de autenticacion
+        previa.
       tags:
-      - preftypes
+      - refresh
       requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PrefTypes'
+              $ref: '#/components/schemas/CustomTokenRefresh'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/PrefTypes'
+              $ref: '#/components/schemas/CustomTokenRefresh'
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/PrefTypes'
+              $ref: '#/components/schemas/CustomTokenRefresh'
         required: true
       security:
-      - jwtAuth: []
+      - {}
       responses:
         '200':
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PrefTypes'
+                $ref: '#/components/schemas/CustomTokenRefresh'
           description: ''
-    patch:
-      operationId: preftypes_partial_update
-      parameters:
-      - in: path
-        name: id_pref
-        schema:
-          type: integer
-        description: A unique integer value identifying this pref types.
-        required: true
-      tags:
-      - preftypes
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedPrefTypes'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedPrefTypes'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedPrefTypes'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PrefTypes'
-          description: ''
-    delete:
-      operationId: preftypes_destroy
-      parameters:
-      - in: path
-        name: id_pref
-        schema:
-          type: integer
-        description: A unique integer value identifying this pref types.
-        required: true
-      tags:
-      - preftypes
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
   /api/v1/register/:
     post:
       operationId: register_create
       description: |-
-        User registration endpoint.
-        POST data should include:
-        - username: unique username
-        - email: unique email
-        - password: password (min 6 characters)
-        - password_confirm: password confirmation
-        - name: first name
-        - surname1: first surname
-        - surname2: second surname (optional)
-        - user_type: user type ID
+        Endpoint para el registro de usuarios.
+        El POST debe incluir:
+        - username: nombre de usuario
+        - email: email único
+        - password: contraseña (mínimo 6 caracteres)
+        - password_confirm: confirmación de contraseña
+        - name: nombre
+        - surname1: primer apellido
+        - surname2: segundo apellido (opcional)
+        - user_type: ID del tipo de usuario
       tags:
       - register
       security:
-      - jwtAuth: []
       - {}
       responses:
         '200':
@@ -1143,17 +1008,18 @@ paths:
   /api/v1/requeststates/:
     get:
       operationId: requeststates_list
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - requeststates
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -1161,45 +1027,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedRequestStatesList'
           description: ''
-    post:
-      operationId: requeststates_create
-      tags:
-      - requeststates
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RequestStates'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/RequestStates'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/RequestStates'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RequestStates'
-          description: ''
   /api/v1/requeststates/{id_state}/:
     get:
       operationId: requeststates_retrieve
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       parameters:
       - in: path
         name: id_state
         schema:
           type: integer
-        description: A unique integer value identifying this request states.
+        description: Un valor de entero único que identifique este request states.
         required: true
       tags:
       - requeststates
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -1207,99 +1049,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/RequestStates'
           description: ''
-    put:
-      operationId: requeststates_update
-      parameters:
-      - in: path
-        name: id_state
-        schema:
-          type: integer
-        description: A unique integer value identifying this request states.
-        required: true
-      tags:
-      - requeststates
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RequestStates'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/RequestStates'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/RequestStates'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RequestStates'
-          description: ''
-    patch:
-      operationId: requeststates_partial_update
-      parameters:
-      - in: path
-        name: id_state
-        schema:
-          type: integer
-        description: A unique integer value identifying this request states.
-        required: true
-      tags:
-      - requeststates
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedRequestStates'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedRequestStates'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedRequestStates'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RequestStates'
-          description: ''
-    delete:
-      operationId: requeststates_destroy
-      parameters:
-      - in: path
-        name: id_state
-        schema:
-          type: integer
-        description: A unique integer value identifying this request states.
-        required: true
-      tags:
-      - requeststates
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
   /api/v1/requesttravel/:
     get:
       operationId: requesttravel_list
+      description: Limita el queryset a los objetos del usuario que hace la peticion
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - requesttravel
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -1307,77 +1069,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedRequestTravelsList'
           description: ''
-    post:
-      operationId: requesttravel_create
-      tags:
-      - requesttravel
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RequestTravels'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/RequestTravels'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/RequestTravels'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RequestTravels'
-          description: ''
   /api/v1/requesttravel/{id}/:
     get:
       operationId: requesttravel_retrieve
+      description: Limita el queryset a los objetos del usuario que hace la peticion
       parameters:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this request travels.
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este request travels.
         required: true
       tags:
       - requesttravel
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RequestTravels'
-          description: ''
-    put:
-      operationId: requesttravel_update
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this request travels.
-        required: true
-      tags:
-      - requesttravel
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RequestTravels'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/RequestTravels'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/RequestTravels'
-        required: true
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -1387,12 +1092,14 @@ paths:
           description: ''
     patch:
       operationId: requesttravel_partial_update
+      description: Limita el queryset a los objetos del usuario que hace la peticion
       parameters:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this request travels.
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este request travels.
         required: true
       tags:
       - requesttravel
@@ -1407,8 +1114,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PatchedRequestTravels'
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -1418,17 +1123,19 @@ paths:
           description: ''
     delete:
       operationId: requesttravel_destroy
+      description: |-
+        Endpoint DELETE /requesttravels/{id}/
+        Elimina una solicitud de viaje especificada por su id
       parameters:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this request travels.
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este request travels.
         required: true
       tags:
       - requesttravel
-      security:
-      - jwtAuth: []
       responses:
         '204':
           description: No response body
@@ -1556,8 +1263,7 @@ paths:
       tags:
       - schema
       security:
-      - jwtAuth: []
-      - {}
+      - cookieAuth: []
       responses:
         '200':
           content:
@@ -1581,17 +1287,18 @@ paths:
   /api/v1/travel/:
     get:
       operationId: travel_list
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - travel
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -1601,6 +1308,9 @@ paths:
           description: ''
     post:
       operationId: travel_create
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       tags:
       - travel
       requestBody:
@@ -1615,8 +1325,6 @@ paths:
             schema:
               $ref: '#/components/schemas/Travel'
         required: true
-      security:
-      - jwtAuth: []
       responses:
         '201':
           content:
@@ -1627,51 +1335,19 @@ paths:
   /api/v1/travel/{id_travel}/:
     get:
       operationId: travel_retrieve
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       parameters:
       - in: path
         name: id_travel
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this travel.
+        description: Un Cadena UUID que identifique este travel.
         required: true
       tags:
       - travel
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Travel'
-          description: ''
-    put:
-      operationId: travel_update
-      parameters:
-      - in: path
-        name: id_travel
-        schema:
-          type: string
-          format: uuid
-        description: A UUID string identifying this travel.
-        required: true
-      tags:
-      - travel
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Travel'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Travel'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Travel'
-        required: true
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -1681,13 +1357,16 @@ paths:
           description: ''
     patch:
       operationId: travel_partial_update
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       parameters:
       - in: path
         name: id_travel
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this travel.
+        description: Un Cadena UUID que identifique este travel.
         required: true
       tags:
       - travel
@@ -1702,8 +1381,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PatchedTravel'
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -1713,35 +1390,335 @@ paths:
           description: ''
     delete:
       operationId: travel_destroy
+      description: |-
+        Endpoint DELETE /travels/{id_travel}/
+        Elimina el viaje indicado, y las solicitudes asociadas a este
       parameters:
       - in: path
         name: id_travel
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this travel.
+        description: Un Cadena UUID que identifique este travel.
         required: true
       tags:
       - travel
-      security:
-      - jwtAuth: []
       responses:
         '204':
           description: No response body
+  /api/v1/travel/{id_travel}/change_pickup_points/:
+    patch:
+      operationId: travel_change_pickup_points_partial_update
+      description: |-
+        Endpoint POST /travel/{id}/change_pickup_points/
+        Cambia los puntos de recogida del viaje
+        Recibe una lista de los puntos intermedios con su direccion, coordenadas, fecha y el orden en el viaje
+        Devuelve un mensaje de exito o error
+      parameters:
+      - in: path
+        name: id_travel
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este travel.
+        required: true
+      tags:
+      - travel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTravel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTravel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTravel'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Travel'
+          description: ''
+  /api/v1/travel/{id_travel}/edit/:
+    patch:
+      operationId: travel_edit_partial_update
+      description: |-
+        Endpoint POST /travel/{id}/edit/
+        Modifica los datos del viaje
+        Para cambiar de periódico a puntual, se requiere un parámetro 'delete_date' con la fecha a partir de la cual eliminar los viajes periódicos futuros.
+        Para cambiar de puntual a periódico, se requieren los parámetros 'interval_days' (días entre viajes) y 'end_date' (fecha final de periodicidad).
+        Devuelve un mensaje de exito o error
+      parameters:
+      - in: path
+        name: id_travel
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este travel.
+        required: true
+      tags:
+      - travel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTravel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTravel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTravel'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Travel'
+          description: ''
+  /api/v1/travel/{id_travel}/finish_travel/:
+    post:
+      operationId: travel_finish_travel_create
+      description: |-
+        Endpoint POST /travel/{id}/finish_travel/
+        Finaliza el viaje: cambia el estado a 'fnd' y marca como 'unvalidated'
+        a los pasajeros que no hayan sido validados durante el viaje.
+      parameters:
+      - in: path
+        name: id_travel
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este travel.
+        required: true
+      tags:
+      - travel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Travel'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Travel'
+          description: ''
+  /api/v1/travel/{id_travel}/get_travel_details/:
+    get:
+      operationId: travel_get_travel_details_retrieve
+      description: |-
+        Endpoint GET /travel/{id}/get_travel_details/
+        Obtiene los detalles de un viaje especificado por su id
+        Devuelve un mapa con los datos del viaje
+      parameters:
+      - in: path
+        name: id_travel
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este travel.
+        required: true
+      tags:
+      - travel
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Travel'
+          description: ''
+  /api/v1/travel/{id_travel}/reached_pickup_point/:
+    post:
+      operationId: travel_reached_pickup_point_create
+      description: |-
+        Endpoint POST /travel/{id}/reached_pickup_point/
+        Marca un punto de recogida como pasado por el.
+      parameters:
+      - in: path
+        name: id_travel
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este travel.
+        required: true
+      tags:
+      - travel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Travel'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Travel'
+          description: ''
+  /api/v1/travel/{id_travel}/remove_passenger/:
+    post:
+      operationId: travel_remove_passenger_create
+      description: |-
+        Endpoint POST /travel/{id}/remove_passenger/
+        Elimina un pasajero de un viaje especificado por su nombre de usuario
+        Recibe el nombre de usuario del pasajero a eliminar y el id del usuario que hace la petición (debe ser el creador del viaje)
+        Devuelve un mensaje de exito o error
+      parameters:
+      - in: path
+        name: id_travel
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este travel.
+        required: true
+      tags:
+      - travel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Travel'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Travel'
+          description: ''
+  /api/v1/travel/{id_travel}/validate_passenger/:
+    post:
+      operationId: travel_validate_passenger_create
+      description: |-
+        Endpoint POST /travel/{id}/validate_passenger/
+        Valida un pasajero del viaje mediante su codigo de validacion.
+        Recibe el codigo del pasajero y actualiza su estado a 'validated'.
+      parameters:
+      - in: path
+        name: id_travel
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este travel.
+        required: true
+      tags:
+      - travel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Travel'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Travel'
+          description: ''
+  /api/v1/travel/request-travel/:
+    post:
+      operationId: travel_request_travel_create
+      description: |-
+        Endpoint POST /travel/request-travel/
+        Solicita una plaza en uno o varios viajes.
+        Recibe una lista de ids de los viajes que se quiere solicitar.
+        Devuelve un menssaje de exito o error
+      tags:
+      - travel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Travel'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Travel'
+          description: ''
+  /api/v1/travel/search-travels/:
+    post:
+      operationId: travel_search_travels_create
+      description: |-
+        Endpoint POST /travel/search-travels/
+        Realiza la busqueda de los viajes segun los filtros, las respuestas estan paginadas
+        Devuelve un diccionario con los datos de los viajes y la url de la siguiente pagina (si existe)
+      tags:
+      - travel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Travel'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Travel'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Travel'
+          description: ''
   /api/v1/travelstates/:
     get:
       operationId: travelstates_list
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - travelstates
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -1749,45 +1726,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedTravelStatesList'
           description: ''
-    post:
-      operationId: travelstates_create
-      tags:
-      - travelstates
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TravelStates'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/TravelStates'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/TravelStates'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TravelStates'
-          description: ''
   /api/v1/travelstates/{id_state}/:
     get:
       operationId: travelstates_retrieve
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       parameters:
       - in: path
         name: id_state
         schema:
           type: integer
-        description: A unique integer value identifying this travel states.
+        description: Un valor de entero único que identifique este travel states.
         required: true
       tags:
       - travelstates
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -1795,99 +1748,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/TravelStates'
           description: ''
-    put:
-      operationId: travelstates_update
-      parameters:
-      - in: path
-        name: id_state
-        schema:
-          type: integer
-        description: A unique integer value identifying this travel states.
-        required: true
-      tags:
-      - travelstates
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TravelStates'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/TravelStates'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/TravelStates'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TravelStates'
-          description: ''
-    patch:
-      operationId: travelstates_partial_update
-      parameters:
-      - in: path
-        name: id_state
-        schema:
-          type: integer
-        description: A unique integer value identifying this travel states.
-        required: true
-      tags:
-      - travelstates
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedTravelStates'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedTravelStates'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedTravelStates'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TravelStates'
-          description: ''
-    delete:
-      operationId: travelstates_destroy
-      parameters:
-      - in: path
-        name: id_state
-        schema:
-          type: integer
-        description: A unique integer value identifying this travel states.
-        required: true
-      tags:
-      - travelstates
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
   /api/v1/users/:
     get:
       operationId: users_list
+      description: Limita el queryset a los objetos del usuario que hace la peticion
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - users
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -1895,34 +1768,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedUserList'
           description: ''
-    post:
-      operationId: users_create
-      tags:
-      - users
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/User'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/User'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/User'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-          description: ''
   /api/v1/users/{id}/:
     get:
       operationId: users_retrieve
+      description: Limita el queryset a los objetos del usuario que hace la peticion
       parameters:
       - in: path
         name: id
@@ -1932,40 +1781,6 @@ paths:
         required: true
       tags:
       - users
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/User'
-          description: ''
-    put:
-      operationId: users_update
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-          pattern: ^[0-9a-f-]{36}$
-        required: true
-      tags:
-      - users
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/User'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/User'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/User'
-        required: true
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -1975,6 +1790,7 @@ paths:
           description: ''
     patch:
       operationId: users_partial_update
+      description: Limita el queryset a los objetos del usuario que hace la peticion
       parameters:
       - in: path
         name: id
@@ -1995,8 +1811,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PatchedUser'
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -2006,6 +1820,7 @@ paths:
           description: ''
     delete:
       operationId: users_destroy
+      description: Limita el queryset a los objetos del usuario que hace la peticion
       parameters:
       - in: path
         name: id
@@ -2015,14 +1830,16 @@ paths:
         required: true
       tags:
       - users
-      security:
-      - jwtAuth: []
       responses:
         '204':
           description: No response body
-  /api/v1/users/{id}/upload-profile_picture/:
-    patch:
-      operationId: users_upload_profile_picture_partial_update
+  /api/v1/users/{id}/change_password/:
+    post:
+      operationId: users_change_password_create
+      description: |-
+        Endpoint POST /users/{id}/change_password/
+        Permite cambiar la contraseña de un usuario
+        Recibe la contraseña actual y la nueva contraseña
       parameters:
       - in: path
         name: id
@@ -2034,14 +1851,16 @@ paths:
       - users
       requestBody:
         content:
-          multipart/form-data:
+          application/json:
             schema:
-              $ref: '#/components/schemas/PatchedUser'
+              $ref: '#/components/schemas/User'
           application/x-www-form-urlencoded:
             schema:
-              $ref: '#/components/schemas/PatchedUser'
-      security:
-      - jwtAuth: []
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
       responses:
         '200':
           content:
@@ -2049,20 +1868,715 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
           description: ''
-  /api/v1/usertypes/:
+  /api/v1/users/{id}/clear-preferences/:
+    delete:
+      operationId: users_clear_preferences_destroy
+      description: |-
+        Endpoint DELETE /users/{id}/clear-preferences/
+        Elimina todas las preferencias asociadas al usuario
+        Devuelve un mensaje de exito o error
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      responses:
+        '204':
+          description: No response body
+  /api/v1/users/{id}/delete-profile_picture/:
+    delete:
+      operationId: users_delete_profile_picture_destroy
+      description: |-
+        Endpoint DELETE /users/{id}/delete-profile_picture/
+        Permite borrar la imagen de perfil de un usuario
+        Devuelve un mensaje de error o exito
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      responses:
+        '204':
+          description: No response body
+  /api/v1/users/{id}/driverratings/:
     get:
-      operationId: usertypes_list
+      operationId: users_driverratings_retrieve
+      description: |-
+        Endpoint GET /users/{id}/driverratings/
+        Devuelve la valoración media de cada criterio para un conductor, junto con el número total de valoraciones recibidas
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/logout/:
+    post:
+      operationId: users_logout_create
+      description: |-
+        Endpoint POST /users/{id}/logout/
+        Cierra la sesion invalidando todos los tokens emitidos hasta ahora
+        Cierra todas las sesiones de la cuenta, no solo la del dispositivo que llama
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/my-requests/:
+    get:
+      operationId: users_my_requests_retrieve
+      description: |-
+        Endpoint GET /users/{id}/my-requests/?type=active|past|pending
+        Devuelve los RequestTravels solicitados por el usuario, filtrando por el estado de la solicitud, futuro, pasado o pendiente de aceptar
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/next_travel/:
+    get:
+      operationId: users_next_travel_retrieve
+      description: |-
+        Endpoint GET /users/{id}/next_travel/
+        Devuelve los siguientes viajes activos del usuario, si no tiene devuelve un 404
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/notifications/:
+    get:
+      operationId: users_notifications_retrieve
+      description: |-
+        Endpoint GET /users/{id}/notifications/?ordering=desc|asc
+        Devuelve todas las notificaciones no borradas del usuario paginadas, ordenadas por fecha
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/notifications/unread-count/:
+    get:
+      operationId: users_notifications_unread_count_retrieve
+      description: |-
+        Endpoint GET /users/{id}/notifications/unread-count/
+        Devuelve el numero de notificaciones no leidas del usuario
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/preferences/:
+    get:
+      operationId: users_preferences_retrieve
+      description: |-
+        Endpoint GET /users/{id}/preferences/
+        Devuelve todas las preferencias no borradas del usuario paginadas
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/rate_a_driver/:
+    post:
+      operationId: users_rate_a_driver_create
+      description: |-
+        Endpoint POST /users/{id}/rate_a_driver/
+        Permite valorar a un conductor tras haber realizado un viaje con el
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/received-requests/:
+    get:
+      operationId: users_received_requests_retrieve
+      description: |-
+        Endpoint GET /users/{id}/received-requests/
+        Devuelve los RequestTravels pendientes de aprobar que ha recibido el usuario
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/travel/:
+    get:
+      operationId: users_travel_retrieve
+      description: |-
+        Endpoint GET /users/{id}/travel/?type=pending|past
+        Devuelve los viajes creados por el usuario filtrando pasados o futuros segun el parametro type
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/two_factor/:
+    post:
+      operationId: users_two_factor_create
+      description: |-
+        Endpoint POST /users/{id}/two_factor/
+        Activa o desactiva la verificacion en dos pasos
+        Recibe enabled y la credencial que pidio el challenge: password o code
+        Devuelve el estado en el que ha quedado el ajuste
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/two_factor/challenge/:
+    post:
+      operationId: users_two_factor_challenge_create
+      description: |-
+        Endpoint POST /users/{id}/two_factor/challenge/
+        Arranca el cambio del segundo factor y responde con lo que hay que
+        presentar para confirmarlo: la contraseña actual, o un codigo que se
+        acaba de enviar al correo de la cuenta si esta solo entra por Google
+        Devuelve {"method": "password"} o {"method": "email"}
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/update-preferences/:
+    patch:
+      operationId: users_update_preferences_partial_update
+      description: |-
+        Endpoint PATCH /users/{id}/update-preferences/
+        Se encarga de actualizar las preferencias del usuario
+        Recibe una lista de nombres de preferencias: {"preferences": ["MUSIC", "SMOKING"...]}
+        Devuelve un mensaje de exito o error
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/upload-profile_picture/:
+    patch:
+      operationId: users_upload_profile_picture_partial_update
+      description: |-
+        Endpoint PATCH /users/{id}/upload-profile_picture/
+        Permite subir la imagen de perfil de un usuario
+        Recibe una imagen
+        Devuelve un mensaje de error o exito y el nombre del archivo subido
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/{id}/vehicles/:
+    get:
+      operationId: users_vehicles_retrieve
+      description: |-
+        Endpoint GET /users/{id}/vehicles/
+        Devuelve todos los vehículos activos del usuario paginados
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          pattern: ^[0-9a-f-]{36}$
+        required: true
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/exist_email/:
+    get:
+      operationId: users_exist_email_retrieve
+      description: |-
+        Endpoint GET /users/exist_email/
+        Verifica si un email ya esta en uso
+        Devuelve OK si el email no esta en uso o KO en caso contrario
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/verification_email/:
+    post:
+      operationId: users_verification_email_create
+      description: |-
+        Endpoint POST /users/verification_email/
+        Envia un mensaje de confirmacion al email del usuario especificado
+        Si se envia además el email, envia el correo de verificacion a ese email,
+        pero solo si quien llama esta autenticado y es el dueño de la cuenta
+        El nombre de usuario es obligatorio
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/verify_code/:
+    post:
+      operationId: users_verify_code_create
+      description: |-
+        Endpoint POST /users/verify_code/
+        Verifica el token del usuario
+        Si se pasa el email, se cambia el correo del usuario a ese (si el token es correcto)
+        Si se pasa la contraseña, se cambia la contraseña del usuario a esa (si el token es correcto)
+        Si se pasa el parametro validate con valor true, se marca el usuario como verificado (si el token es correcto)
+        El nombre de usuario y token son obligatorios
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/users/verify_user/:
+    get:
+      operationId: users_verify_user_retrieve
+      description: |-
+        Endpoint GET /users/verify_user/
+        Verifica si un usuario (nombre de usuario o email) ya esta en uso
+        Devuelve OK ambos estan libres o los campos en uso en caso contrario
+      tags:
+      - users
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/v1/usersdenied/:
+    get:
+      operationId: usersdenied_list
+      description: |-
+        Base de los ViewSets de lo que depende de un viaje: puntos de recogida y tipos
+        de usuario denegados. Solo el creador del viaje puede tocarlos.
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
+        schema:
+          type: integer
+      tags:
+      - usersdenied
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUsersDeniedList'
+          description: ''
+    post:
+      operationId: usersdenied_create
+      description: |-
+        Base de los ViewSets de lo que depende de un viaje: puntos de recogida y tipos
+        de usuario denegados. Solo el creador del viaje puede tocarlos.
+      tags:
+      - usersdenied
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsersDenied'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UsersDenied'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UsersDenied'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersDenied'
+          description: ''
+  /api/v1/usersdenied/{id_deny}/:
+    get:
+      operationId: usersdenied_retrieve
+      description: |-
+        Base de los ViewSets de lo que depende de un viaje: puntos de recogida y tipos
+        de usuario denegados. Solo el creador del viaje puede tocarlos.
+      parameters:
+      - in: path
+        name: id_deny
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este users denied.
+        required: true
+      tags:
+      - usersdenied
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersDenied'
+          description: ''
+    put:
+      operationId: usersdenied_update
+      description: |-
+        Base de los ViewSets de lo que depende de un viaje: puntos de recogida y tipos
+        de usuario denegados. Solo el creador del viaje puede tocarlos.
+      parameters:
+      - in: path
+        name: id_deny
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este users denied.
+        required: true
+      tags:
+      - usersdenied
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsersDenied'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UsersDenied'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UsersDenied'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersDenied'
+          description: ''
+    patch:
+      operationId: usersdenied_partial_update
+      description: |-
+        Base de los ViewSets de lo que depende de un viaje: puntos de recogida y tipos
+        de usuario denegados. Solo el creador del viaje puede tocarlos.
+      parameters:
+      - in: path
+        name: id_deny
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este users denied.
+        required: true
+      tags:
+      - usersdenied
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUsersDenied'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUsersDenied'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUsersDenied'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsersDenied'
+          description: ''
+    delete:
+      operationId: usersdenied_destroy
+      description: |-
+        Base de los ViewSets de lo que depende de un viaje: puntos de recogida y tipos
+        de usuario denegados. Solo el creador del viaje puede tocarlos.
+      parameters:
+      - in: path
+        name: id_deny
+        schema:
+          type: string
+          format: uuid
+        description: Un Cadena UUID que identifique este users denied.
+        required: true
+      tags:
+      - usersdenied
+      responses:
+        '204':
+          description: No response body
+  /api/v1/usertypes/:
+    get:
+      operationId: usertypes_list
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - usertypes
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -2070,45 +2584,21 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedUserTypeList'
           description: ''
-    post:
-      operationId: usertypes_create
-      tags:
-      - usertypes
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserType'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/UserType'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/UserType'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserType'
-          description: ''
   /api/v1/usertypes/{id_type}/:
     get:
       operationId: usertypes_retrieve
+      description: |-
+        Clase para aplicar un soft delete, es decir que no se elimine de bbdd el elemento, si no que se marque como borrado,
+        ademas, se sobreescribe el queryset para que por defecto no saque los elementos marcados como borrados
       parameters:
       - in: path
         name: id_type
         schema:
           type: integer
-        description: A unique integer value identifying this user type.
+        description: Un valor de entero único que identifique este user type.
         required: true
       tags:
       - usertypes
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -2116,99 +2606,20 @@ paths:
               schema:
                 $ref: '#/components/schemas/UserType'
           description: ''
-    put:
-      operationId: usertypes_update
-      parameters:
-      - in: path
-        name: id_type
-        schema:
-          type: integer
-        description: A unique integer value identifying this user type.
-        required: true
-      tags:
-      - usertypes
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserType'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/UserType'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/UserType'
-        required: true
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserType'
-          description: ''
-    patch:
-      operationId: usertypes_partial_update
-      parameters:
-      - in: path
-        name: id_type
-        schema:
-          type: integer
-        description: A unique integer value identifying this user type.
-        required: true
-      tags:
-      - usertypes
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PatchedUserType'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/PatchedUserType'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/PatchedUserType'
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserType'
-          description: ''
-    delete:
-      operationId: usertypes_destroy
-      parameters:
-      - in: path
-        name: id_type
-        schema:
-          type: integer
-        description: A unique integer value identifying this user type.
-        required: true
-      tags:
-      - usertypes
-      security:
-      - jwtAuth: []
-      responses:
-        '204':
-          description: No response body
   /api/v1/vehicles/:
     get:
       operationId: vehicles_list
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - name: page
         required: false
         in: query
-        description: A page number within the paginated result set.
+        description: Un número de página dentro del conjunto de resultados paginado.
         schema:
           type: integer
       tags:
       - vehicles
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -2218,6 +2629,8 @@ paths:
           description: ''
     post:
       operationId: vehicles_create
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       tags:
       - vehicles
       requestBody:
@@ -2232,8 +2645,6 @@ paths:
             schema:
               $ref: '#/components/schemas/Vehicle'
         required: true
-      security:
-      - jwtAuth: []
       responses:
         '201':
           content:
@@ -2244,51 +2655,18 @@ paths:
   /api/v1/vehicles/{id_vehicle}/:
     get:
       operationId: vehicles_retrieve
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id_vehicle
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this vehicles.
+        description: Un Cadena UUID que identifique este vehicles.
         required: true
       tags:
       - vehicles
-      security:
-      - jwtAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Vehicle'
-          description: ''
-    put:
-      operationId: vehicles_update
-      parameters:
-      - in: path
-        name: id_vehicle
-        schema:
-          type: string
-          format: uuid
-        description: A UUID string identifying this vehicles.
-        required: true
-      tags:
-      - vehicles
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Vehicle'
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: '#/components/schemas/Vehicle'
-          multipart/form-data:
-            schema:
-              $ref: '#/components/schemas/Vehicle'
-        required: true
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -2298,13 +2676,15 @@ paths:
           description: ''
     patch:
       operationId: vehicles_partial_update
+      description: Obliga a que el objeto creado tenga como dueño al usuario que hace
+        la peticion
       parameters:
       - in: path
         name: id_vehicle
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this vehicles.
+        description: Un Cadena UUID que identifique este vehicles.
         required: true
       tags:
       - vehicles
@@ -2319,8 +2699,6 @@ paths:
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/PatchedVehicle'
-      security:
-      - jwtAuth: []
       responses:
         '200':
           content:
@@ -2330,18 +2708,19 @@ paths:
           description: ''
     delete:
       operationId: vehicles_destroy
+      description: |-
+        Endpoint DELETE /vehicles/{id_vehicle}/
+        Elimina el vehiculo indicado, siempre que no tenga un viaje asociado a él
       parameters:
       - in: path
         name: id_vehicle
         schema:
           type: string
           format: uuid
-        description: A UUID string identifying this vehicles.
+        description: Un Cadena UUID que identifique este vehicles.
         required: true
       tags:
       - vehicles
-      security:
-      - jwtAuth: []
       responses:
         '204':
           description: No response body
@@ -2349,18 +2728,16 @@ components:
   schemas:
     Criteria:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id:
           type: integer
           readOnly: true
-        code:
-          type: string
-          maxLength: 8
-        description:
-          type: string
-          maxLength: 100
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -2372,18 +2749,24 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
+        code:
+          type: string
+          maxLength: 15
+        description:
+          type: string
+          maxLength: 100
       required:
       - code
       - created_at
+      - deleted_at
       - description
       - id
+      - is_deleted
       - updated_at
     CustomTokenObtainPair:
       type: object
-      description: |-
-        Custom serializer for JWT token obtain that uses email or username with password.
-        Accepts either 'username' or 'email' along with 'password'.
       properties:
         username:
           type: string
@@ -2391,22 +2774,44 @@ components:
         password:
           type: string
           writeOnly: true
+        code:
+          type: string
+          writeOnly: true
       required:
       - password
       - username
-    DriverRatings:
+    CustomTokenRefresh:
       type: object
+      description: |-
+        Valida el token de refresh, si es valido se genera un nuevo token de access y opcionalmente un nuevo token de refresh
+
+        Args:
+            attrs (dict): Un diccionario con el token de refresh
+
+        Returns:
+            dict: Un diccionario con los tokens JWT.
       properties:
-        id_rating:
+        refresh:
+          type: string
+        access:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - refresh
+    Device:
+      type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
+      properties:
+        id:
           type: string
           format: uuid
           readOnly: true
-        score:
-          type: integer
-          maximum: 10
-          minimum: 0
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -2418,7 +2823,57 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
+        fcm_token:
+          type: string
+          maxLength: 255
+        platform:
+          type: string
+          maxLength: 20
+        id_user:
+          type: string
+          format: uuid
+          readOnly: true
+      required:
+      - created_at
+      - deleted_at
+      - fcm_token
+      - id
+      - id_user
+      - is_deleted
+      - platform
+      - updated_at
+    DriverRatings:
+      type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
+      properties:
+        id_rating:
+          type: string
+          format: uuid
+          readOnly: true
+        is_deleted:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        score:
+          type: integer
+          maximum: 10
+          minimum: 0
         id_user:
           type: string
           format: uuid
@@ -2426,63 +2881,69 @@ components:
           type: string
           format: uuid
         criteria:
-          type: integer
+          type: string
       required:
       - created_at
       - criteria
+      - deleted_at
       - id_driver
       - id_rating
       - id_user
+      - is_deleted
       - score
       - updated_at
     EnvTypes:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id_type:
           type: integer
           readOnly: true
+        is_deleted:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         code:
           type: string
           maxLength: 10
         label:
           type: string
           maxLength: 20
-        is_deleted:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        deleted_at:
-          type: string
-          format: date-time
-          nullable: true
       required:
       - code
       - created_at
+      - deleted_at
       - id_type
+      - is_deleted
       - label
       - updated_at
     Notifications:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id:
           type: string
           format: uuid
           readOnly: true
-        content:
-          type: string
-          maxLength: 300
-        date:
-          type: string
-          format: date-time
-          readOnly: true
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -2494,7 +2955,17 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
+        content:
+          type: string
+          maxLength: 450
+        date:
+          type: string
+          format: date-time
+          readOnly: true
+        read:
+          type: boolean
         id_user:
           type: string
           format: uuid
@@ -2502,8 +2973,10 @@ components:
       - content
       - created_at
       - date
+      - deleted_at
       - id
       - id_user
+      - is_deleted
       - updated_at
     PaginatedCriteriaList:
       type: object
@@ -2528,6 +3001,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Criteria'
+    PaginatedDeviceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Device'
     PaginatedDriverRatingsList:
       type: object
       required:
@@ -2804,6 +3300,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UserType'
+    PaginatedUsersDeniedList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsersDenied'
     PaginatedVehicleList:
       type: object
       required:
@@ -2827,20 +3346,19 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Vehicle'
-    PatchedCriteria:
+    PatchedDevice:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
           readOnly: true
-        code:
-          type: string
-          maxLength: 8
-        description:
-          type: string
-          maxLength: 100
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -2852,20 +3370,31 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
+        fcm_token:
+          type: string
+          maxLength: 255
+        platform:
+          type: string
+          maxLength: 20
+        id_user:
+          type: string
+          format: uuid
+          readOnly: true
     PatchedDriverRatings:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id_rating:
           type: string
           format: uuid
           readOnly: true
-        score:
-          type: integer
-          maximum: 10
-          minimum: 0
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -2877,7 +3406,12 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
+        score:
+          type: integer
+          maximum: 10
+          minimum: 0
         id_user:
           type: string
           format: uuid
@@ -2885,49 +3419,20 @@ components:
           type: string
           format: uuid
         criteria:
-          type: integer
-    PatchedEnvTypes:
-      type: object
-      properties:
-        id_type:
-          type: integer
-          readOnly: true
-        code:
           type: string
-          maxLength: 10
-        label:
-          type: string
-          maxLength: 20
-        is_deleted:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        deleted_at:
-          type: string
-          format: date-time
-          nullable: true
     PatchedNotifications:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id:
           type: string
           format: uuid
           readOnly: true
-        content:
-          type: string
-          maxLength: 300
-        date:
-          type: string
-          format: date-time
-          readOnly: true
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -2939,69 +3444,71 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
+        content:
+          type: string
+          maxLength: 450
+        date:
+          type: string
+          format: date-time
+          readOnly: true
+        read:
+          type: boolean
         id_user:
           type: string
           format: uuid
     PatchedPickUpPoint:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id_point:
           type: string
           format: uuid
           readOnly: true
+        is_deleted:
+          type: boolean
+          readOnly: true
+          default: false
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         direction:
           type: string
-          maxLength: 100
+          maxLength: 250
+        date:
+          type: string
+          format: date-time
+          nullable: true
+        point:
+          type: string
+          nullable: true
         order_in_travel:
           type: integer
           maximum: 100
           minimum: 0
-        is_deleted:
+        is_reached:
           type: boolean
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        deleted_at:
-          type: string
-          format: date-time
-          nullable: true
         id_travel:
           type: string
           format: uuid
-    PatchedPrefTypes:
-      type: object
-      properties:
-        id_pref:
-          type: integer
-          readOnly: true
-        code:
-          type: string
-          maxLength: 8
-        description:
-          type: string
-          maxLength: 50
-        is_deleted:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        deleted_at:
-          type: string
-          format: date-time
-          nullable: true
     PatchedPreferences:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id_pref:
           type: string
@@ -3009,6 +3516,7 @@ components:
           readOnly: true
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3020,46 +3528,37 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
         id_user:
           type: string
           format: uuid
         pref_type:
-          type: integer
-    PatchedRequestStates:
-      type: object
-      properties:
-        id_state:
-          type: integer
-          readOnly: true
-        code:
           type: string
-          maxLength: 8
-        description:
-          type: string
-          maxLength: 50
-        is_deleted:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        deleted_at:
-          type: string
-          format: date-time
-          nullable: true
     PatchedRequestTravels:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
+          readOnly: true
+        id_travel:
+          allOf:
+          - $ref: '#/components/schemas/Travel'
+          readOnly: true
+        user:
+          allOf:
+          - $ref: '#/components/schemas/PublicUser'
+          readOnly: true
+        validation_code:
+          type: string
           readOnly: true
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3071,22 +3570,75 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
-        id_travel:
-          type: string
-          format: uuid
-        user:
-          type: string
-          format: uuid
         status:
-          type: integer
+          type: string
     PatchedTravel:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id_travel:
           type: string
           format: uuid
           readOnly: true
+        origin_lat:
+          type: number
+          format: double
+          writeOnly: true
+        origin_lng:
+          type: number
+          format: double
+          writeOnly: true
+        destination_lat:
+          type: number
+          format: double
+          writeOnly: true
+        destination_lng:
+          type: number
+          format: double
+          writeOnly: true
+        vehicle_id:
+          type: string
+          format: uuid
+          writeOnly: true
+        pick_up_points:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          writeOnly: true
+        deny_roles:
+          type: array
+          items:
+            type: string
+          writeOnly: true
+        creation_user:
+          allOf:
+          - $ref: '#/components/schemas/PublicUser'
+          readOnly: true
+        vehicle:
+          allOf:
+          - $ref: '#/components/schemas/Vehicle'
+          readOnly: true
+        is_deleted:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         periodic_interval:
           type: integer
           maximum: 31
@@ -3094,12 +3646,22 @@ components:
           nullable: true
         is_periodic:
           type: boolean
+        end_periodic_date:
+          type: string
+          format: date
+          nullable: true
         origin:
           type: string
-          maxLength: 50
+          maxLength: 175
         destination:
           type: string
-          maxLength: 50
+          maxLength: 175
+        origin_point:
+          type: string
+          nullable: true
+        destination_point:
+          type: string
+          nullable: true
         duration_minutes:
           type: integer
           maximum: 2147483647
@@ -3114,58 +3676,12 @@ components:
           minimum: 0
         travel_date:
           type: string
-          format: date
-        is_deleted:
-          type: boolean
-        created_at:
-          type: string
           format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        deleted_at:
-          type: string
-          format: date-time
-          nullable: true
-        creation_user:
-          type: string
-          format: uuid
         state:
-          type: integer
+          type: string
         id_origin_travel:
           type: string
           format: uuid
-          nullable: true
-        vehicle:
-          type: string
-          format: uuid
-    PatchedTravelStates:
-      type: object
-      properties:
-        id_state:
-          type: integer
-          readOnly: true
-        code:
-          type: string
-          maxLength: 8
-        description:
-          type: string
-          maxLength: 50
-        is_deleted:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        deleted_at:
-          type: string
-          format: date-time
           nullable: true
     PatchedUser:
       type: object
@@ -3180,7 +3696,7 @@ components:
         email:
           type: string
           format: email
-          maxLength: 60
+          readOnly: true
         name:
           type: string
           maxLength: 50
@@ -3192,24 +3708,26 @@ components:
           nullable: true
           maxLength: 50
         user_type:
-          type: integer
+          type: string
         profile_picture_url:
           type: string
           readOnly: true
-    PatchedUserType:
-      type: object
-      properties:
-        id_type:
-          type: integer
+        has_2FA:
+          type: boolean
           readOnly: true
-        code:
+    PatchedUsersDenied:
+      type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
+      properties:
+        id_deny:
           type: string
-          maxLength: 8
-        name:
-          type: string
-          maxLength: 50
+          format: uuid
+          readOnly: true
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3221,7 +3739,13 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
+        id_travel:
+          type: string
+          format: uuid
+        user_type:
+          type: string
     PatchedVehicle:
       type: object
       properties:
@@ -3245,41 +3769,25 @@ components:
           type: integer
           maximum: 10
           minimum: 2
-        is_deleted:
-          type: boolean
-        created_at:
+        env_sticker:
           type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        deleted_at:
-          type: string
-          format: date-time
-          nullable: true
         id_user:
           type: string
           format: uuid
-        env_sticker:
-          type: integer
     PickUpPoint:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id_point:
           type: string
           format: uuid
           readOnly: true
-        direction:
-          type: string
-          maxLength: 100
-        order_in_travel:
-          type: integer
-          maximum: 100
-          minimum: 0
         is_deleted:
           type: boolean
+          readOnly: true
+          default: false
         created_at:
           type: string
           format: date-time
@@ -3291,31 +3799,48 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
+        direction:
+          type: string
+          maxLength: 250
+        date:
+          type: string
+          format: date-time
+          nullable: true
+        point:
+          type: string
+          nullable: true
+        order_in_travel:
+          type: integer
+          maximum: 100
+          minimum: 0
+        is_reached:
+          type: boolean
         id_travel:
           type: string
           format: uuid
       required:
       - created_at
+      - deleted_at
       - direction
       - id_point
       - id_travel
+      - is_deleted
       - order_in_travel
       - updated_at
     PrefTypes:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id_pref:
           type: integer
           readOnly: true
-        code:
-          type: string
-          maxLength: 8
-        description:
-          type: string
-          maxLength: 50
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3327,15 +3852,27 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
+        code:
+          type: string
+          maxLength: 25
+        description:
+          type: string
+          maxLength: 50
       required:
       - code
       - created_at
+      - deleted_at
       - description
       - id_pref
+      - is_deleted
       - updated_at
     Preferences:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id_pref:
           type: string
@@ -3343,6 +3880,7 @@ components:
           readOnly: true
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3354,58 +3892,105 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
         id_user:
           type: string
           format: uuid
         pref_type:
-          type: integer
+          type: string
       required:
       - created_at
+      - deleted_at
       - id_pref
       - id_user
+      - is_deleted
       - pref_type
       - updated_at
+    PublicUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        username:
+          type: string
+          pattern: ^[\w.-]{3,20}$
+          maxLength: 20
+        user_type:
+          type: string
+        profile_picture_url:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - profile_picture_url
+      - user_type
+      - username
     RequestStates:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id_state:
           type: integer
           readOnly: true
+        is_deleted:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         code:
           type: string
-          maxLength: 8
+          maxLength: 15
         description:
           type: string
           maxLength: 50
-        is_deleted:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        deleted_at:
-          type: string
-          format: date-time
-          nullable: true
       required:
       - code
       - created_at
+      - deleted_at
       - description
       - id_state
+      - is_deleted
       - updated_at
     RequestTravels:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id:
-          type: integer
+          type: string
+          format: uuid
+          readOnly: true
+        id_travel:
+          allOf:
+          - $ref: '#/components/schemas/Travel'
+          readOnly: true
+        user:
+          allOf:
+          - $ref: '#/components/schemas/PublicUser'
+          readOnly: true
+        validation_code:
+          type: string
           readOnly: true
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3417,40 +4002,85 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
-        id_travel:
-          type: string
-          format: uuid
-        user:
-          type: string
-          format: uuid
         status:
-          type: integer
+          type: string
       required:
       - created_at
+      - deleted_at
       - id
       - id_travel
+      - is_deleted
       - status
       - updated_at
       - user
-    TokenRefresh:
-      type: object
-      properties:
-        access:
-          type: string
-          readOnly: true
-        refresh:
-          type: string
-      required:
-      - access
-      - refresh
+      - validation_code
     Travel:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id_travel:
           type: string
           format: uuid
           readOnly: true
+        origin_lat:
+          type: number
+          format: double
+          writeOnly: true
+        origin_lng:
+          type: number
+          format: double
+          writeOnly: true
+        destination_lat:
+          type: number
+          format: double
+          writeOnly: true
+        destination_lng:
+          type: number
+          format: double
+          writeOnly: true
+        vehicle_id:
+          type: string
+          format: uuid
+          writeOnly: true
+        pick_up_points:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          writeOnly: true
+        deny_roles:
+          type: array
+          items:
+            type: string
+          writeOnly: true
+        creation_user:
+          allOf:
+          - $ref: '#/components/schemas/PublicUser'
+          readOnly: true
+        vehicle:
+          allOf:
+          - $ref: '#/components/schemas/Vehicle'
+          readOnly: true
+        is_deleted:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
         periodic_interval:
           type: integer
           maximum: 31
@@ -3458,12 +4088,22 @@ components:
           nullable: true
         is_periodic:
           type: boolean
+        end_periodic_date:
+          type: string
+          format: date
+          nullable: true
         origin:
           type: string
-          maxLength: 50
+          maxLength: 175
         destination:
           type: string
-          maxLength: 50
+          maxLength: 175
+        origin_point:
+          type: string
+          nullable: true
+        destination_point:
+          type: string
+          nullable: true
         duration_minutes:
           type: integer
           maximum: 2147483647
@@ -3478,9 +4118,45 @@ components:
           minimum: 0
         travel_date:
           type: string
-          format: date
+          format: date-time
+        state:
+          type: string
+        id_origin_travel:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - created_at
+      - creation_user
+      - deleted_at
+      - destination
+      - destination_lat
+      - destination_lng
+      - duration_minutes
+      - id_travel
+      - is_deleted
+      - num_seats
+      - origin
+      - origin_lat
+      - origin_lng
+      - remaining_seats
+      - state
+      - travel_date
+      - updated_at
+      - vehicle
+      - vehicle_id
+    TravelStates:
+      type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
+      properties:
+        id_state:
+          type: integer
+          readOnly: true
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3492,63 +4168,21 @@ components:
         deleted_at:
           type: string
           format: date-time
-          nullable: true
-        creation_user:
-          type: string
-          format: uuid
-        state:
-          type: integer
-        id_origin_travel:
-          type: string
-          format: uuid
-          nullable: true
-        vehicle:
-          type: string
-          format: uuid
-      required:
-      - created_at
-      - creation_user
-      - destination
-      - duration_minutes
-      - id_travel
-      - num_seats
-      - origin
-      - remaining_seats
-      - state
-      - travel_date
-      - updated_at
-      - vehicle
-    TravelStates:
-      type: object
-      properties:
-        id_state:
-          type: integer
           readOnly: true
+          nullable: true
         code:
           type: string
           maxLength: 8
         description:
           type: string
           maxLength: 50
-        is_deleted:
-          type: boolean
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        deleted_at:
-          type: string
-          format: date-time
-          nullable: true
       required:
       - code
       - created_at
+      - deleted_at
       - description
       - id_state
+      - is_deleted
       - updated_at
     User:
       type: object
@@ -3563,7 +4197,7 @@ components:
         email:
           type: string
           format: email
-          maxLength: 60
+          readOnly: true
         name:
           type: string
           maxLength: 50
@@ -3575,12 +4209,16 @@ components:
           nullable: true
           maxLength: 50
         user_type:
-          type: integer
+          type: string
         profile_picture_url:
           type: string
           readOnly: true
+        has_2FA:
+          type: boolean
+          readOnly: true
       required:
       - email
+      - has_2FA
       - id
       - name
       - profile_picture_url
@@ -3589,18 +4227,16 @@ components:
       - username
     UserType:
       type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
       properties:
         id_type:
           type: integer
           readOnly: true
-        code:
-          type: string
-          maxLength: 8
-        name:
-          type: string
-          maxLength: 50
         is_deleted:
           type: boolean
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -3612,13 +4248,61 @@ components:
         deleted_at:
           type: string
           format: date-time
+          readOnly: true
           nullable: true
+        code:
+          type: string
+          maxLength: 8
+        name:
+          type: string
+          maxLength: 50
       required:
       - code
       - created_at
+      - deleted_at
       - id_type
+      - is_deleted
       - name
       - updated_at
+    UsersDenied:
+      type: object
+      description: |-
+        Deja los campos de auditoria de BaseModel en solo lectura. La forma de borrar sigue siendo DELETE,
+        que pasa por SoftDeleteQuerysetMixin.perform_destroy y escribe is_deleted y deleted_at sin pasar por el serializer.
+      properties:
+        id_deny:
+          type: string
+          format: uuid
+          readOnly: true
+        is_deleted:
+          type: boolean
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        deleted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        id_travel:
+          type: string
+          format: uuid
+        user_type:
+          type: string
+      required:
+      - created_at
+      - deleted_at
+      - id_deny
+      - id_travel
+      - is_deleted
+      - updated_at
+      - user_type
     Vehicle:
       type: object
       properties:
@@ -3642,38 +4326,22 @@ components:
           type: integer
           maximum: 10
           minimum: 2
-        is_deleted:
-          type: boolean
-        created_at:
+        env_sticker:
           type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-        deleted_at:
-          type: string
-          format: date-time
-          nullable: true
         id_user:
           type: string
           format: uuid
-        env_sticker:
-          type: integer
       required:
       - brand
       - color
-      - created_at
       - env_sticker
       - id_user
       - id_vehicle
       - license_plate
       - model
       - seats
-      - updated_at
   securitySchemes:
-    jwtAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
