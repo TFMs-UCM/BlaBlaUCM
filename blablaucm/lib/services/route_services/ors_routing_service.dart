@@ -13,6 +13,8 @@ class RouteStep {
   final double duration; // Duracion en segundos de este paso
   final LatLng startPoint; // Punto de inicio de este paso
   final int type; // Tipo de maniobra (0=izquierda, 1=derecha, etc.)
+  final int wayPointStart; // Indice en routePoints donde empieza el paso
+  final int wayPointEnd; // Indice en routePoints donde acaba el paso (la maniobra)
 
   RouteStep({
     required this.instruction,
@@ -20,6 +22,25 @@ class RouteStep {
     required this.duration,
     required this.startPoint,
     required this.type,
+    required this.wayPointStart,
+    required this.wayPointEnd,
+  });
+}
+
+// Clase para mostar el progreso del conductor sobre la ruta calculada.
+class RouteProgress {
+  final int stepIndex; // Paso que se esta recorriendo ahora mismo
+  final int routeIndex; // Punto de la polilinea mas cercano al conductor
+  final double distanceToManeuver; // Metros que faltan hasta la siguiente maniobra
+  final double remainingDistance; // Metros que faltan hasta el final del tramo
+  final double remainingDuration; // Segundos estimados hasta el final del tramo
+
+  const RouteProgress({
+    required this.stepIndex,
+    required this.routeIndex,
+    required this.distanceToManeuver,
+    required this.remainingDistance,
+    required this.remainingDuration,
   });
 }
 
@@ -103,8 +124,8 @@ class OrsRoutingService {
         final segSteps = segment['steps'] as List;
         for (final step in segSteps) {
           final wayPoints = step['way_points'] as List;
-          final startIdx = wayPoints[0] as int;
-          // Se obtiene el punto de inicio de cada paso
+          final startIdx = (wayPoints[0] as int).clamp(0, routePoints.length - 1);
+          final endIdx = (wayPoints[1] as int).clamp(0, routePoints.length - 1);
           final startCoord = coords[startIdx];
           steps.add(RouteStep(
             instruction: step['instruction'] ?? '',
@@ -112,6 +133,8 @@ class OrsRoutingService {
             duration: (step['duration'] as num).toDouble(),
             startPoint: LatLng(startCoord[1].toDouble(), startCoord[0].toDouble()),
             type: step['type'] ?? 0,
+            wayPointStart: startIdx,
+            wayPointEnd: endIdx,
           ));
         }
       }
@@ -156,20 +179,81 @@ class OrsRoutingService {
     return h2 > 0 ? sqrt(h2) : 0;
   }
 
-  // Encuentra el indice del paso actual basandose en la posicion del conductor
-  static int findCurrentStepIndex(LatLng currentPos, List<RouteStep> steps) {
-    const distance = Distance();
-    double minDist = double.infinity;
-    int closestIdx = 0;
+  // Distancia maxima de ruta que se explora por delante del punto ya alcanzado
+  static const double _progressSearchWindow = 2000.0;
 
-    for (int i = 0; i < steps.length; i++) {
-      final d = distance.as(LengthUnit.Meter, currentPos, steps[i].startPoint);
+  // Funcion para calcular por donde va el conductor proyectando su posicion sobre la ruta
+  static RouteProgress computeProgress(LatLng currentPos, RouteResult route, {int fromStepIndex = 0}) {
+    final points = route.routePoints;
+    final steps = route.steps;
+
+    if (points.length < 2 || steps.isEmpty) {
+      return const RouteProgress(
+        stepIndex: 0,
+        routeIndex: 0,
+        distanceToManeuver: 0,
+        remainingDistance: 0,
+        remainingDuration: 0,
+      );
+    }
+
+    const distance = Distance();
+    final safeFrom = fromStepIndex.clamp(0, steps.length - 1);
+    final searchStart = steps[safeFrom].wayPointStart.clamp(0, points.length - 1);
+
+    // Se busca el punto de la ruta mas cercano dentro de la ventana de busqueda
+    int closestIdx = searchStart;
+    double minDist = double.infinity;
+    double walked = 0;
+    for (int i = searchStart; i < points.length; i++) {
+      if (i > searchStart) {
+        walked += distance.as(LengthUnit.Meter, points[i - 1], points[i]);
+        if (walked > _progressSearchWindow) break;
+      }
+      final d = distance.as(LengthUnit.Meter, currentPos, points[i]);
       if (d < minDist) {
         minDist = d;
         closestIdx = i;
       }
     }
-    return closestIdx;
+
+    // Se localiza el paso que contiene ese punto de la ruta
+    int stepIndex = safeFrom;
+    for (int i = safeFrom; i < steps.length; i++) {
+      if (closestIdx < steps[i].wayPointEnd) {
+        stepIndex = i;
+        break;
+      }
+      stepIndex = i;
+    }
+
+    // Distancia que queda hasta la siguiente maniobra
+    final maneuverIdx = steps[stepIndex].wayPointEnd.clamp(0, points.length - 1);
+    double distanceToManeuver = 0;
+    for (int i = closestIdx; i < maneuverIdx; i++) {
+      distanceToManeuver += distance.as(LengthUnit.Meter, points[i], points[i + 1]);
+    }
+
+    double remainingDistance = distanceToManeuver;
+    for (int i = maneuverIdx; i < points.length - 1; i++) {
+      remainingDistance += distance.as(LengthUnit.Meter, points[i], points[i + 1]);
+    }
+
+    final currentStep = steps[stepIndex];
+    double remainingDuration = currentStep.distance > 0
+        ? currentStep.duration * (distanceToManeuver / currentStep.distance).clamp(0.0, 1.0)
+        : 0;
+    for (int i = stepIndex + 1; i < steps.length; i++) {
+      remainingDuration += steps[i].duration;
+    }
+
+    return RouteProgress(
+      stepIndex: stepIndex,
+      routeIndex: closestIdx,
+      distanceToManeuver: distanceToManeuver,
+      remainingDistance: remainingDistance,
+      remainingDuration: remainingDuration,
+    );
   }
 
   // Formatea la distancia para mostarla al usuario

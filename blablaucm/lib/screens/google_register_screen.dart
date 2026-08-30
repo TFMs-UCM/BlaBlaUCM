@@ -56,6 +56,14 @@ class _GoogleRegisterScreenState extends State<GoogleRegisterScreen> {
       return;
     }
 
+    // Antes de crear la cuenta hay que aceptar los terminos y condiciones
+    
+    final bool termsAccepted = await showTermsAndConditionsModal(context);
+
+    if (!termsAccepted) return; // Sin aceptar los terminos no se crea la cuenta
+
+    if (!mounted) return;
+
     setState(() => _isSaving = true);
 
     try {
@@ -77,11 +85,18 @@ class _GoogleRegisterScreenState extends State<GoogleRegisterScreen> {
 
       final code = result['statusCode'] as int?;
 
-      if (code == 200) { // Si se ha registrado correctamente, se lleva al menu principal
-        Navigator.pushAndRemoveUntil(
+      if (code == 200) { // Si se ha registrado correctamente, se avisa y se lleva al menu principal
+        showModal(
           context,
-          MaterialPageRoute(builder: (_) => const HomePage()),
-          (_) => false,
+          'Tu cuenta ha sido creada correctamente. ¡Bienvenido!',
+          title: 'Éxito',
+          type: AlertType.success,
+          barrierDismissible: false,
+          onAccepted: () => Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (_) => const HomePage()),
+            (_) => false,
+          ),
         );
         return;
       }

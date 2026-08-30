@@ -1,17 +1,13 @@
-import secrets
-import string
-import hashlib
-from datetime import timedelta
-from django.utils import timezone
-from decouple import config
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.exceptions import InvalidToken
 from users.models import Users
+from users.services.auth_service import AuthService
+from users.services.user_service import UserService
+from users.services.exceptions import (EmailDeliveryError, InvalidTokenError, TokenExpiredError, UserNotFoundError)
 from api.exceptions import CustomAPIException
-from api.errors import ErrorCodes
-from services.email.email_service import Email
 from api.errors import ErrorCodes
 import logging
 
@@ -69,19 +65,19 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         try:
             # Se comprueba tanto el nombre de usuario como el email (siempre que no este eliminado)
-            user = Users.objects.get(username=username, is_deleted=False) if '@' not in username else Users.objects.get(email=username, is_deleted=False)
-        except Users.DoesNotExist:
+            user = UserService.find_by_username_or_email(username)
+        except UserNotFoundError:
             logger.warning("Login failed, user not found: %s", username)
             raise CustomAPIException(
                 code=ErrorCodes.USER_DONT_EXIST,
                 message="No exise un usuario registrado con ese email o nombre de usuario",
                 status_code=400
-            ) 
+            )
         
         if not user.is_verify:
             logger.warning("Login failed, user not verified: %s", username)
             raise CustomAPIException(
-                code=ErrorCodes.USER_DONT_EXIST, # Throw this error, because if the user is not verify, for all efects it doesnt exist
+                code=ErrorCodes.USER_DONT_EXIST, # Si el usuario no esta validado, es como si no existiera
                 message="No exise un usuario registrado con ese email o nombre de usuario",
                 status_code=400
             )
@@ -102,69 +98,43 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         if getattr(user, 'has_2FA', False):
             if not code:
-                token = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(6))
-                hashed_token = hashlib.sha256(token.encode()).hexdigest()
-                
-                user.token = hashed_token
-                user.token_expiration = timezone.now() + timedelta(minutes=config('TOKEN_EXPIRATION_TIME', cast=int, default=5))
-                user.save()
-                
                 try:
-                    email_service = Email()
-                    email_service.send_verification_email(to=user.email, token=token)
-                    logger.info("2FA code sent to: %s", user.email)
-                except Exception as e:
-                    logger.error("Failed to send 2FA email: %s", str(e))
+                    AuthService.start_second_factor(user)
+                except EmailDeliveryError:
                     raise CustomAPIException(
                         code=ErrorCodes.EMAIL_ERROR,
-                        message="Error en el envio del email de verificación", 
+                        message="Error en el envio del email de verificación",
                         status_code=500
                     )
-                
                 return {
                     "requires_2fa": True,
                     "message": "2FA code sent to email."
                 }
-                
+
             else:
-                if not user.token_expiration or user.token_expiration < timezone.now():
+                if not AuthService.has_pending_code(user):
                     raise CustomAPIException(
                         code=ErrorCodes.TOKEN_EXPIRED,
-                        message="El código ha expirado", 
+                        message="El código ha expirado",
                         status_code=400
                     )
-                
-                input_hash = hashlib.sha256(code.encode()).hexdigest()
-                if input_hash != user.token:
+                try:
+                    AuthService.check_second_factor(user, code)
+                except TokenExpiredError:
+                    raise CustomAPIException(
+                        code=ErrorCodes.TOKEN_EXPIRED,
+                        message="El código ha expirado",
+                        status_code=400
+                    )
+                except InvalidTokenError:
                     raise CustomAPIException(
                         code=ErrorCodes.INCORRECT_TOKEN,
                         message="Código incorrecto",
                         status_code=400
                     )
-                
-                user.token = None
-                user.token_expiration = None
-                user.save()
 
-        refresh = RefreshToken.for_user(user)
-        
-        user.is_verify = True
-        user.save()
-        
-        data = {
-            'refresh': str(refresh),
-            'access': str(refresh.access_token),
-            'user': {
-                'id': str(user.id),
-                'username': user.username,
-                'email': user.email,
-                'name': user.name,
-                'surname1': user.surname1,
-                'surname2': user.surname2,
-            }
-        }
         logger.info("Login successful for user: %s", username)
-        return data
+        return AuthService.build_auth_payload(user)
 
 class CustomTokenRefreshSerializer(TokenRefreshSerializer):
     """
@@ -178,8 +148,18 @@ class CustomTokenRefreshSerializer(TokenRefreshSerializer):
     """
     def validate(self, attrs):
         refresh = RefreshToken(attrs['refresh'])
+        user_id = refresh.get(api_settings.USER_ID_CLAIM)
+        user = Users.objects.filter(**{api_settings.USER_ID_FIELD: user_id, 'is_deleted': False}).first() if user_id else None
+
+        if user is None:
+            logger.warning("Refresh rechazado: usuario del token inexistente (%s)", user_id)
+            raise InvalidToken('El usuario del token no existe')
+        # Se comprueba si la sesion se ha revocado (el usuario ha cerrado sesiono cambiado la contraseña)
+        if AuthService.token_is_revoked(user, refresh):
+            logger.warning("Refresh rechazado: token revocado para el usuario %s", user_id)
+            raise InvalidToken('El token ha sido revocado')
+
         data = {'access': str(refresh.access_token)}
-        
         if api_settings.ROTATE_REFRESH_TOKENS:
             try:
                 data['refresh'] = str(refresh)

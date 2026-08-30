@@ -1,9 +1,9 @@
 from django.urls import path, include
 from rest_framework import routers
-from api.views.user_views import UsersViewSet, UserTypeViewSet, VehiclesViewSet, \
-    NotificationsViewSet, PrefTypesViewSet, PreferencesViewSet, CriteriaViewSet, \
-    DriverRatingsViewSet, EnvTypesViewSet, DeviceViewSet
-from api.views.travel_views import TravelStatesViewSet, TravelViewSet, RequestStatesViewSet, RequestTravelsViewSet, PickUpPointsViewSet, UsersDeniedViewSet
+from api.views.user_views import UsersViewSet
+from api.views.user_data_views import VehiclesViewSet, NotificationsViewSet, PreferencesViewSet, DriverRatingsViewSet, DeviceViewSet
+from api.views.catalog_views import UserTypeViewSet, PrefTypesViewSet, CriteriaViewSet, EnvTypesViewSet, TravelStatesViewSet, RequestStatesViewSet
+from api.views.travel_views import TravelViewSet, RequestTravelsViewSet, PickUpPointsViewSet, UsersDeniedViewSet
 from api.views.chat_views import ChatViewSet
 from api.views.media_views import serve_protected_profile_picture
 from api.views.auth_views import CustomTokenRefreshView

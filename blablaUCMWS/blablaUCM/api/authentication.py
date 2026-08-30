@@ -2,6 +2,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.settings import api_settings
 from users.models import Users
+from users.services.auth_service import AuthService
 
 class UsersJWTAuthentication(JWTAuthentication):
     """
@@ -20,5 +21,8 @@ class UsersJWTAuthentication(JWTAuthentication):
 
         if not user:
             raise AuthenticationFailed('User not found', code='user_not_found')
+
+        if AuthService.token_is_revoked(user, validated_token):
+            raise AuthenticationFailed('Token revoked', code='token_revoked')
 
         return user

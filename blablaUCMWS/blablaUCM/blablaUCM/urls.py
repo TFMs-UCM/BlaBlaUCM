@@ -17,12 +17,19 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from api.views.auth_views import CustomTokenObtainPairView, register_view, CustomTokenRefreshView, google_login_view, google_register_view
+from api.docs_access import staff_only
+from api.honeypot import admin_honeypot
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    # El panel real, en la ruta que diga ADMIN_URL (nunca 'admin/', settings lo impide)
+    path(settings.ADMIN_URL, admin.site.urls),
+
+    # Señuelo en la ruta de siempre. Aqui ya no hay nada legitimo, asi que todo lo
+    # que llegue queda registrado y avisa por correo
+    path('admin/', admin_honeypot, name='admin_honeypot'),
 
     # Se añaden los endpoints de las vistas
     path('api/v1/', include('api.urls')),  
@@ -34,10 +41,15 @@ urlpatterns = [
     path('api/v1/auth/google/login/', google_login_view, name='google_login'),
     path('api/v1/auth/google/register/', google_register_view, name='google_register'),
 
-    # Esquema y docs
-    path('api/v1/schema/', SpectacularAPIView.as_view(), name='schema'),
-    path('api/v1/docs/', SpectacularSwaggerView.as_view(url_name='schema')),
+    # Esquema y docs, solo para administradores, para el resto, error 404
+    path(
+        'api/v1/schema/',
+        staff_only(SpectacularAPIView.as_view()),
+        name='schema',
+    ),
+    path(
+        'api/v1/docs/',
+        staff_only(SpectacularSwaggerView.as_view(url_name='schema')),
+        name='docs',
+    ),
 ]
-# To serve pictures without authentication
-#+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-

@@ -103,6 +103,8 @@ class RouteStepWidget extends StatelessWidget {
   final TextEditingController destinationCtrl;
   final TextEditingController durationCtrl;
   final bool showError;
+  final bool isEstimatingDuration; // Para calcular la duración estimada del viaje, se calcula automaticamente al introducir el origen y el destino usando ORS
+  final DateTime? selectedDate;
   final List<PickUpPointModel> pickUpPoints;
   final LocationService placesService; // Servicio para el autocompletado y sacar las coordenadas
   final Function(double lat, double lng, bool isOrigin) onCoordsUpdated;
@@ -114,6 +116,8 @@ class RouteStepWidget extends StatelessWidget {
     required this.destinationCtrl,
     required this.durationCtrl,
     required this.showError,
+    required this.isEstimatingDuration,
+    required this.selectedDate,
     required this.pickUpPoints,
     required this.placesService,
     required this.onCoordsUpdated,
@@ -164,14 +168,54 @@ class RouteStepWidget extends StatelessWidget {
                     const SizedBox(height: 12),
                     
                     // Campo de la duracion del viaje en minutos
-                    TextField(
+                    TextField( // Campo para introducir la duracion del viaje en minutos, se calcula automaticamente al introducir el origen y el destino usando ORS, se puede modificar a mano si se desea
                       controller: durationCtrl,
                       keyboardType: TextInputType.number,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      decoration: InputDecoration(
+                      decoration: InputDecoration( 
                         labelText: "Duración estimada (minutos)",
                         errorText: showError && durationCtrl.text.isEmpty ? "Campo obligatorio" : null,
+                        helperText: isEstimatingDuration
+                            ? "Calculando la duración de la ruta..."
+                            : "Se calcula sola al elegir origen y destino, puedes ajustarla",
+                        helperMaxLines: 2,
+                        suffixIcon: isEstimatingDuration
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                              )
+                            : null,
                       ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    ValueListenableBuilder<TextEditingValue>( // Muestra la hora de llegada en base a la hora de salida y la duracion del viaje, no es editable
+                      valueListenable: durationCtrl,
+                      builder: (context, value, _) {
+                        final minutes = int.tryParse(value.text.trim());
+                        final arrival = (selectedDate != null && minutes != null)
+                            ? selectedDate!.add(Duration(minutes: minutes)) : null;
+                        final otherDay = arrival != null && arrival.day != selectedDate!.day;
+
+                        return InputDecorator( 
+                          decoration: const InputDecoration(
+                            labelText: "Hora estimada de llegada",
+                            enabled: false,
+                            prefixIcon: Icon(Icons.schedule),
+                          ),
+                          child: Text(
+                            arrival == null
+                                ? "—"
+                                : "${arrival.hour.toString().padLeft(2, '0')}:${arrival.minute.toString().padLeft(2, '0')}"
+                                  "${otherDay ? " (${arrival.day.toString().padLeft(2, '0')}/${arrival.month.toString().padLeft(2, '0')})" : ""}",
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),

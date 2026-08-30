@@ -22,3 +22,6 @@ blablaUCMWS/blablaUCM/media/
 .vscode/
 .idea/
 *.iml
+/blablaUCMWS/blablaUCM/secrets
+/blablaUCMWS/blablaUCM/logs
+blablaUCMWS/blablaUCM/.coverage

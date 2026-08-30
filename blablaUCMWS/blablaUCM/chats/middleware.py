@@ -7,14 +7,23 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings
 
 from users.models import Users
+from users.services.auth_service import AuthService
 
 # Funcion asincrona para obtener el usaurio a partir de su id
 @database_sync_to_async
-def get_user(user_id):
+def get_user(user_id, token=None):
     try:
-        return Users.objects.get(id=user_id)
+        user = Users.objects.get(id=user_id)
     except Users.DoesNotExist:
         return None
+
+    if not user.is_authenticated:
+        return None
+
+    if token is not None and AuthService.token_is_revoked(user, token):
+        return None
+
+    return user
 
 # Middleware de autenticacion para los WebSocket
 class JWTAuthMiddleware(BaseMiddleware):
@@ -29,7 +38,7 @@ class JWTAuthMiddleware(BaseMiddleware):
             try:
                 access_token = AccessToken(token)
                 user_id = access_token[api_settings.USER_ID_CLAIM]
-                scope['user'] = await get_user(user_id)
+                scope['user'] = await get_user(user_id, access_token)
             except (TokenError, KeyError):
                 scope['user'] = None
 

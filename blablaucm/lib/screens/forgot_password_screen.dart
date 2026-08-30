@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:blablaucm/models/api_error.dart';
 import 'package:blablaucm/services/api_service.dart';
 import 'package:blablaucm/screens/helper.dart';
 import 'package:blablaucm/screens/custom_form_fields.dart';
 import 'package:blablaucm/screens/email_verification.dart';
 import 'package:blablaucm/models/enums.dart';
+import 'package:blablaucm/theme/app_colors.dart';
 
 // Pantalla de recuperacion de contraseña
 
@@ -57,22 +59,24 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _identifierError = null;
     });
 
-    try {
-      await EmailVerification.sendVerificationEmail(username: identifier);
-      if (!mounted) return;
-      setState(() {
-        _username = identifier;
-        _step = 2;
-        _isLoading = false;
-      });
-    } 
-    catch (_) {
-      if (!mounted) return;
+    // El fallo se comprueba por el valor devuelto
+    final error = await EmailVerification.sendVerificationEmail(username: identifier);
+
+    if (!mounted) return;
+
+    if (error != null) {
       setState(() {
         _isLoading = false;
-        _identifierError = "No se pudo enviar el código. Comprueba que el usuario o email es correcto.";
+        _identifierError = error.code == ErrorCode.userDontExist ? "No existe ninguna cuenta con ese usuario o correo." : EmailVerification.messageFor(error);
       });
+      return;
     }
+
+    setState(() {
+      _username = identifier;
+      _step = 2;
+      _isLoading = false;
+    });
   }
 
   // Se reenvia el codigo
@@ -82,12 +86,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       _codeError = null;
     });
     _codeCtrl.clear();
-    try {
-      await EmailVerification.sendVerificationEmail(username: _username);
-    } 
-    finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+
+    final error = await EmailVerification.sendVerificationEmail(username: _username);
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _codeError = error == null ? null : EmailVerification.messageFor(error);
+    });
   }
 
   // Se verifica el codigo y cambia la contraseña
@@ -150,20 +156,28 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         type: AlertType.success,
         backPage: true,
       );
-    } 
+    }
     else {
-      final rawCode = response?['error_code'];
-      final errorCode = rawCode != null ? ErrorCode.fromCode(int.tryParse(rawCode.toString()) ?? -1) : ErrorCode.unknownError;
+      final error = ApiError.from(response) ?? ApiError.connection;
 
       setState(() {
-        if (errorCode == ErrorCode.tokenExpired) {
-          _codeError = "El código ha expirado. Solicita uno nuevo.";
-        } 
-        else if (errorCode == ErrorCode.incorrectToken) {
-          _codeError = "Código incorrecto. Inténtalo de nuevo.";
-        } 
-        else {
-          _codeError = "Error al cambiar la contraseña. Inténtalo de nuevo.";
+        switch (error.code) {
+          case ErrorCode.tokenExpired:
+            _codeError = "El código ha expirado. Solicita uno nuevo.";
+            break;
+          case ErrorCode.incorrectToken:
+            _codeError = "Código incorrecto. Inténtalo de nuevo.";
+            break;
+          case ErrorCode.tooManyRequests:
+            // La api limita los intentos 
+            _codeError = "Demasiados intentos. Espera unos minutos y vuelve a probar.";
+            break;
+          case ErrorCode.validationError:
+            // La contraseña nueva no pasa la validacion del serializer
+            _passwordError = error.fieldMessage('password') ?? error.message;
+            break;
+          default:
+            _codeError = "Error al cambiar la contraseña. Inténtalo de nuevo.";
         }
       });
     }
@@ -200,14 +214,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   // Se crea el paso 1, que es introducir el email o nombre de usuario y enviar el codigo
   Widget _buildStep1() {
+    final colors = AppColors.of(context);
+
     return Column(
       children: [
         const Icon(Icons.lock_reset, size: 70, color: AppButtonStyles.primaryColor),
         const SizedBox(height: 16),
-        const Text(
+        Text(
           "Introduce tu email o nombre de usuario y te enviaremos un código para restablecer tu contraseña.",
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 14, color: Colors.black54),
+          style: TextStyle(fontSize: 14, color: colors.textSecondary),
         ),
         const SizedBox(height: 24),
         TextField(
@@ -243,6 +259,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
   // Se crea el paso 2, que es verificar el código y cambiar la contraseña
   Widget _buildStep2() {
+    final colors = AppColors.of(context);
+
     return Column(
       children: [
         const Icon(Icons.mark_email_read_outlined, size: 70, color: AppButtonStyles.primaryColor),
@@ -250,14 +268,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         Text(
           "Hemos enviado un código a tu email. Introdúcelo junto con tu nueva contraseña.",
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 14, color: Colors.black54),
+          style: TextStyle(fontSize: 14, color: colors.textSecondary),
         ),
         const SizedBox(height: 8),
         GestureDetector(
           onTap: _isLoading ? null : _resendCode,
           child: const Text(
             "Reenviar código",
-            style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
+            style: TextStyle(color: AppColors.info, fontWeight: FontWeight.bold),
           ),
         ),
         const SizedBox(height: 24),

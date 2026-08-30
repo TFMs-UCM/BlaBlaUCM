@@ -639,7 +639,7 @@ class _PaginatedRequestListState extends State<PaginatedRequestList> {
         id: travelData['id_travel'] ?? "",
         origin: travelData['origin'] ?? "Origen desconocido",
         destination: travelData['destination'] ?? "Destino desconocido",
-        startDate: DateTime.tryParse(travelData['travel_date'] ?? "") ?? DateTime.now(),
+        startDate: DateTime.tryParse(travelData['travel_date'] ?? "")?.toLocal() ?? DateTime.now(),
         duration: travelData['duration_minutes'] ?? 0,
         remainingSeats: travelData['remaining_seats'] ?? 0,
         numSeats: travelData['num_seats'] ?? 4,
@@ -785,7 +785,7 @@ class _PaginatedRequestListState extends State<PaginatedRequestList> {
   Widget build(BuildContext context) {
     if (_isLoading) return const Center(child: CircularProgressIndicator());
     // SI no hay solicitudes, se muestra un mensaje
-    if (_requests.isEmpty) return const Center(child: Text("No tienes solicitudes recibidas pendientes.", style: TextStyle(fontSize: 18, color: Colors.grey)));
+    if (_requests.isEmpty) return const Center(child: Text("No tienes solicitudes.", style: TextStyle(fontSize: 18, color: Colors.grey)));
 
     return ListView(
       // Se muestran las solicitudes recibidas

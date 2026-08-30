@@ -90,6 +90,31 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
 
   bool hasPassengers = false; // Indica si hay pasajeros en el viaje
 
+  // Numero maximo de plazas que se pueden publicar, siempre depende del vehiculo seleccionado en ese momento
+  // (las plazas del coche menos la del conductor), si el viaje es periodico, las plazas no se pueden modificar
+  int get maxSeats => widget.travel.isPeriodic ? widget.travel.numSeats : vehicle.maxPassengers;
+
+  // Numero minimo de plazas que se pueden publicar, no puede ser menor que las reservas ya confirmadas
+  // Si el viaje es periodico, las plazas no se pueden modificar
+  int get minSeats => widget.travel.isPeriodic ? widget.travel.numSeats : (hasPassengers ? widget.numPassengers : 1);
+
+  // Funcion para ajustar las plazas publicadas a la capacidad del vehiculo indicado, devuelve las plazas ya ajustadas
+  // Solo reduce, por defecto no aumenta el numero de plazas publicadas aunque el nuevo vehiculo tenga mayor capacidad
+  // Para ampliarlo debe ser el conductor
+  int _fitSeatsToVehicle(VehicleModel v) {
+    if (widget.travel.isPeriodic){
+      return currentSeats; // En un viaje periodico las plazas no se tocan
+    }
+    int seats = currentSeats;
+    if (seats > v.maxPassengers){
+      seats = v.maxPassengers; // Si el nuevo vehiculo tiene menos plazas, se reducen
+    }
+    if (seats < minSeats){
+      seats = minSeats; // Nunca por debajo de las reservas ya confirmadas
+    }
+    return seats;
+  }
+
   // Funcion inicial de la pantalla
   @override
   void initState() {
@@ -247,9 +272,8 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
       return;
     }
 
-    // Se comprueba que el numero de plazas publicas sea correcto
-    int minSeats = widget.travel.isPeriodic ? widget.travel.numSeats : (hasPassengers ? widget.numPassengers : 1);
-    if (currentSeats < minSeats || currentSeats > vehicle.maxPassengers) {
+    // Se comprueba que el numero de plazas publicas sea correcto para el vehiculo seleccionado
+    if (currentSeats < minSeats || currentSeats > maxSeats) {
       setState(() => showError = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: const Text("El número de plazas seleccionadas no es válido."), backgroundColor: errorColor),
@@ -268,12 +292,9 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
         return;
       }
       // Se comprueba que el viaje tenga una fecha de fin de periodicidad posterior a la fecha de inicio
-      final endUtc = endPeriodicDate!.toUtc();
-      final startUtc = selectedDate.toUtc();
-      
       // Se sacan solo el año, mes y día
-      final pureEndDate = DateTime.utc(endUtc.year, endUtc.month, endUtc.day);
-      final pureStartDate = DateTime.utc(startUtc.year, startUtc.month, startUtc.day);
+      final pureEndDate = DateTime(endPeriodicDate!.year, endPeriodicDate!.month, endPeriodicDate!.day);
+      final pureStartDate = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
 
       // Se comparan las fechas sin la hora
       if (pureEndDate.isBefore(pureStartDate)) {
@@ -326,8 +347,8 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
         
         "is_periodic": selectedTravelType == TravelType.periodic,
         "periodic_interval": selectedTravelType == TravelType.periodic ? int.tryParse(periodicDaysCtrl.text) : null,
-        "end_periodic_date": endPeriodicDate != null ? endPeriodicDate!.toUtc().toIso8601String().split('T')[0] : null,
-        "periodic_remove_date": periodicRemoveDate != null ? periodicRemoveDate!.toUtc().toIso8601String().split('T')[0] : null,
+        "end_periodic_date": endPeriodicDate != null ? formatDateOnly(endPeriodicDate!) : null,
+        "periodic_remove_date": periodicRemoveDate != null ? formatDateOnly(periodicRemoveDate!) : null,
         "users_deny": restrictedUserTypes.map((u) => u.name).toList(),
         "only_this_travel": onlyThisTravel,
       };
@@ -341,7 +362,8 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
         final updatedTravel = widget.travel;
         updatedTravel.origin = origin;
         updatedTravel.destination = destination;
-        updatedTravel.remainingSeats = seats;
+        updatedTravel.numSeats = seats; // Las plazas publicadas pasan a ser las nuevas
+        updatedTravel.remainingSeats = seats - widget.numPassengers < 0 ? 0 : seats - widget.numPassengers; // Las libres son las publicadas menos las ya reservadas
         updatedTravel.duration = duration;
         updatedTravel.startDate = selectedDate;
         updatedTravel.vehicle = vehicle;
@@ -588,11 +610,6 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
 
   // Widget para construir el card de horario y plazas, con los campos de fecha, hora y numero de plazas
   Widget _buildScheduleAndSeatsGrid() {
-    // Se calcula el maximo y minimo numero de plazas 
-    int maxSeats =  widget.travel.isPeriodic ?widget.travel.numSeats : vehicle.maxPassengers; // Como maximo son las plazas del vehiculo menos la plaza del conductor
-    // Si es periodico, no se pueden modificar las plazas, en caso de que sea puntual, si tiene pasajeros no puede ser menor que el numero de ellos
-    int minSeats = widget.travel.isPeriodic ? widget.travel.numSeats : (hasPassengers ? widget.numPassengers : 1);
-
     bool canAddSeats = widget.travel.isPeriodic ? false : currentSeats < maxSeats; // Se pueden añadir sitios si los actuales son menores que el maximo
     bool canRemoveSeats = widget.travel.isPeriodic ? false : currentSeats > minSeats; // Se pueden quitar sitios si los actuales son mayores que el minimo
 
@@ -778,7 +795,7 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
                 decoration: BoxDecoration(
                   color: surfaceContainerLow, 
                   borderRadius: BorderRadius.circular(12),
-                  border: (showError && (currentSeats < minSeats || currentSeats > vehicle.maxPassengers)) ? Border.all(color: errorColor, width: 1.5) : null,
+                  border: (showError && (currentSeats < minSeats || currentSeats > maxSeats)) ? Border.all(color: errorColor, width: 1.5) : null,
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -818,7 +835,7 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
                 ),
               ),
               // Si el numero de plazas es inválido, se muestra un mensaje indicandolo
-              if (showError && (currentSeats < minSeats || currentSeats > vehicle.maxPassengers)) ...[
+              if (showError && (currentSeats < minSeats || currentSeats > maxSeats)) ...[
                 const SizedBox(height: 4),
                 Center(
                   child: Text("Número de plazas inválido", style: TextStyle(fontSize: 12, color: errorColor, fontWeight: FontWeight.bold)),
@@ -828,10 +845,19 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
               const SizedBox(height: 8),
               Center( // Si ya hay pasajeros, se indica el numero de viajes reservados, si no se indica el total de asientos disponibles
                 child: Text(
-                  hasPassengers ? "Ya tienes ${widget.numPassengers} reserva(s) confirmada(s)." : "Asientos disponibles para pasajeros", 
+                  hasPassengers ? "Ya tienes ${widget.numPassengers} reserva(s) confirmada(s)." : "Asientos disponibles para pasajeros",
                   style: TextStyle(fontSize: 13, color: hasPassengers ? primaryColor : textMuted, fontWeight: hasPassengers ? FontWeight.w600 : FontWeight.normal)
                 )
               ),
+              if (!widget.travel.isPeriodic) ...[ // Se indica el maximo actual, que depende del vehiculo seleccionado
+                const SizedBox(height: 4),
+                Center(
+                  child: Text(
+                    "Máximo $maxSeats según el vehículo seleccionado",
+                    style: TextStyle(fontSize: 12, color: textMuted),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -862,12 +888,24 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
                   isLoadingVehicles: isLoadingVehicles,
                   isLoadingMoreVehicles: isLoadingMoreVehicles,
                   nextVehiclesUrl: nextVehiclesUrl,
-                  onSelectVehicle: (v) => setState(() {
-                    vehicle = v;
-                    if (currentSeats > v.maxPassengers) currentSeats = v.maxPassengers;
-                    final minSeats = hasPassengers ? widget.numPassengers : 1;
-                    if (currentSeats < minSeats) currentSeats = minSeats;
-                  }),
+                  onSelectVehicle: (v) {
+                    // Al cambiar de vehiculo, las plazas publicadas se ajustan a la capacidad del nuevo coche
+                    final int newSeats = _fitSeatsToVehicle(v);
+                    final bool seatsChanged = newSeats != currentSeats;
+                    setState(() {
+                      vehicle = v;
+                      currentSeats = newSeats;
+                    });
+                    // Si el cambio de vehiculo ha obligado a modificar las plazas, se avisa al usuario
+                    if (seatsChanged) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text("Las plazas publicadas se han ajustado a $newSeats por la capacidad del vehículo seleccionado."),
+                          backgroundColor: primaryColor,
+                        ),
+                      );
+                    }
+                  },
                   onLoadMore: _loadMoreVehicles,
                   onCreateNewVehicle: () {
                     Navigator.push<void>(context, MaterialPageRoute(
@@ -875,13 +913,15 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
                         onSave: (newVehicle) {
                           setState(() {
                             userVehicles.insert(0, newVehicle);
-                            if (newVehicle.maxPassengers >= currentSeats) {
+                            // Solo se puede asignar si cubre el minimo del viaje (reservas confirmadas o plazas fijas si es periodico)
+                            if (newVehicle.maxPassengers >= minSeats) {
                               vehicle = newVehicle;
-                            } 
+                              currentSeats = _fitSeatsToVehicle(newVehicle); // Se ajustan las plazas a la capacidad del nuevo vehiculo
+                            }
                             else {
                               _pendingVehicleWarning =
                                 "El vehículo creado tiene ${newVehicle.maxPassengers} plaza${newVehicle.maxPassengers > 1 ? 's' : ''} para pasajeros, "
-                                "pero el viaje necesita al menos $currentSeats. No se puede asignar.";
+                                "pero el viaje necesita al menos $minSeats. No se puede asignar.";
                             }
                           });
                         },
@@ -894,7 +934,9 @@ class _TravelEditScreenState extends State<TravelEditScreen> {
                       }
                     });
                   },
-                  minRequiredPassengers: widget.travel.numSeats,
+                  // Solo se bloquean los vehiculos que no cubren el minimo real del viaje, las reservas ya confirmadas
+                  // (o las plazas publicadas si es periodico, porque ahi no se pueden reducir)
+                  minRequiredPassengers: minSeats,
                 ),
                 child: Text("Cambiar", style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold)),
               )

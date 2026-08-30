@@ -1,0 +1,77 @@
+# Stack de produccion en una VM de Azure
+#
+# Diferencias con docker-compose.yml (el de desarrollo, que sigue intacto):
+#   - No hay servicio db: la base de datos es Azure Database for PostgreSQL
+#     Flexible Server, fuera de la maquina, con TLS obligatorio.
+#   - Hay redis: capa de canales compartida para los WebSockets del chat y
+#     cache compartida para la limitacion de peticiones.
+#   - Hay caddy: unico servicio expuesto a Internet, termina el TLS y hace
+#     proxy hacia daphne
+#
+#   Uso:
+#     cp .env.azure.example .env.azure     # y rellenar los valores reales
+#     docker compose --env-file .env.azure -f docker-compose.azure.yml up -d --build
+
+name: blablaucm-azure
+
+services:
+  redis:
+    image: redis:7-alpine
+    # Sin ports: solo es accesible desde la red interna del compose
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  web:
+    build: .
+    env_file: .env.azure
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - media:/app/media          # fotos de perfil y adjuntos
+      - logs:/app/logs            # logs de la app
+      - staticfiles:/app/staticfiles
+      # Credenciales de Firebase (opcional, el push falla en silencio si faltan).
+      - ./secrets:/app/secrets:ro
+    expose:
+      - "8000"
+    # --proxy-headers hace que daphne tome la IP del cliente de X-Forwarded-For en vez de la del proxy
+    command: ["daphne", "-b", "0.0.0.0", "-p", "8000", "--proxy-headers", "blablaUCM.asgi:application"]
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - web
+    environment:
+      # Los lee el Caddyfile
+      DOMAIN: "${DOMAIN:?falta DOMAIN - lanza el compose con --env-file .env.azure, o usa scripts/azure.sh}"
+      ACME_EMAIL: "${ACME_EMAIL:?falta ACME_EMAIL - lanza el compose con --env-file .env.azure, o usa scripts/azure.sh}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3 (QUIC)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Landing publica de descarga del APK (index.html, icono, .apk)
+      - ${WEB_ROOT:-/home/azureuser/pag_web}:/srv/web:ro
+      # caddy_data guarda los certificados y las claves de cuenta ACME. Si se
+      # borra, Caddy vuelve a pedir certificados desde cero y Let's Encrypt
+      # tiene limite de peticiones semanales, conviene no perder este volumen.
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+    restart: unless-stopped
+
+volumes:
+  media:
+  logs:
+  staticfiles:
+  caddy_data:
+  caddy_config:
+  caddy_logs:

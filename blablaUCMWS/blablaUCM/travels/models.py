@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from api.base_models import BaseModel
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
 from users.models import Users, UserType, Vehicles
@@ -7,7 +8,7 @@ from django.db.models import Q
 from django.contrib.gis.db import models as gis_models
 
 # Modelo de estados de un viaje
-class TravelStates(models.Model):
+class TravelStates(BaseModel):
     id_state = models.AutoField(
         primary_key=True,
         editable=False,
@@ -16,11 +17,6 @@ class TravelStates(models.Model):
     
     code = models.CharField(max_length=8, unique=True)
     description = models.CharField(max_length=50)
-
-    is_deleted = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'travel_states'
@@ -36,7 +32,7 @@ class TravelStates(models.Model):
         return self.description
     
 # Modelo para los viajes
-class Travel(models.Model):
+class Travel(BaseModel):
     id_travel = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -73,11 +69,6 @@ class Travel(models.Model):
         ]
     )
     travel_date = models.DateTimeField()
-
-    is_deleted = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
 
     creation_user = models.ForeignKey(
         'users.Users',
@@ -135,7 +126,7 @@ class Travel(models.Model):
         ]
 
 # Modelo para los puntos de recogida
-class PickUpPoints(models.Model):
+class PickUpPoints(BaseModel):
     id_point = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -153,11 +144,6 @@ class PickUpPoints(models.Model):
         ]
     )
     is_reached = models.BooleanField(default=False)
-
-    is_deleted = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
 
     id_travel = models.ForeignKey(
         'travels.Travel',
@@ -179,18 +165,13 @@ class PickUpPoints(models.Model):
         ]
 
 # Modelo para los usuarios denegados de un viaje
-class UsersDenied(models.Model):
+class UsersDenied(BaseModel):
     id_deny = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
         editable=False,
         db_column='id_deny'
     )
-
-    is_deleted = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
 
     id_travel = models.ForeignKey(
         'travels.Travel',
@@ -208,7 +189,7 @@ class UsersDenied(models.Model):
         db_table = 'users_denied'
 
 # Modelo para los estados de las solicitudes de un viaje
-class RequestStates(models.Model):
+class RequestStates(BaseModel):
     id_state = models.AutoField(
         primary_key=True,
         editable=False,
@@ -216,11 +197,6 @@ class RequestStates(models.Model):
     )
     code = models.CharField(max_length=15, unique=True)
     description = models.CharField(max_length=50)
-
-    is_deleted = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = 'request_states'
@@ -236,11 +212,7 @@ class RequestStates(models.Model):
         return self.description
 
 # Modelo para las solicitudes de viajes
-class RequestTravels(models.Model):
-    # TODO
-    # code = models.CharField(max_length=100)
-    # chatStatus....
-    # La parte de chats va en el subsistema de mensajeria, que se implementara en proximos sprints
+class RequestTravels(BaseModel):
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -248,11 +220,6 @@ class RequestTravels(models.Model):
         db_column='id_request'
     )
     validation_code = models.CharField(max_length=20, null=True, blank=True)
-    is_deleted = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    deleted_at = models.DateTimeField(null=True, blank=True)
-
     id_travel = models.ForeignKey(
         'travels.Travel',
         on_delete=models.CASCADE,

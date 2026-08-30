@@ -115,11 +115,11 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [ // Slider para establecer el radio de origen, por defecto infinito
                           const Text(
-                            "Radio desde el origen (km)",
+                            "Radio desde el origen",
                             style: TextStyle(fontSize: 16),
                           ),
                           Text(
-                            radiusToOrigin == 0 ? "Sin filtro" :
+                            radiusToOrigin <= 0 ? "---" :
                             "${radiusToOrigin.toStringAsFixed(1)} km",
                             style: const TextStyle(
                               fontSize: 16,
@@ -149,11 +149,11 @@ class _FilterOptionsPageState extends State<FilterOptionsPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            "Radio desde el destino (km)",
+                            "Radio desde el destino",
                             style: TextStyle(fontSize: 16),
                           ),
                           Text(
-                            radiusToDest == 0 ? "Sin filtro" :
+                            radiusToDest <= 0 ? "---" :
                             "${radiusToDest.toStringAsFixed(1)} km",
                             style: const TextStyle(
                               fontSize: 16,

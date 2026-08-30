@@ -1,0 +1,48 @@
+# Aplicacion Django (ASGI/daphne) + PostgreSQL 18 + PostGIS 3.6
+#   Uso local:
+#     cp .env.docker.example .env.docker   # y ajusta los valores
+#     docker compose up -d --build
+#   La app queda en http://localhost:8000/
+name: blablaucm
+
+services:
+  db:
+    # PostgreSQL 18 + PostGIS 3.6.
+    # La imagen crea automaticamente la extension postgis en $POSTGRES_DB
+    image: postgis/postgis:18-3.6
+    env_file: .env.docker
+    volumes:
+      # Postgres 18+: el volumen se monta en /var/lib/postgresql (no en .../data)
+      #
+      # Cifrado en reposo con setup_encrypted_volume.sh
+      - ${PGDATA_HOST_PATH:-pgdata}:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  web:
+    build: .
+    env_file: .env.docker
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - media:/app/media          # fotos de perfil y adjuntos
+      - logs:/app/logs            # logs de la app
+      - staticfiles:/app/staticfiles
+      # Credenciales de Firebase (opcional, el push falla en silencio si faltan)
+      - ./secrets:/app/secrets:ro
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  media:
+  logs:
+  staticfiles:

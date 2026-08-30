@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:blablaucm/providers/storage_provider.dart';
+import 'package:blablaucm/main.dart';
+import 'package:blablaucm/screens/login_screen.dart';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -18,6 +20,29 @@ class ApiService {
   static String get refreshEndpoint => dotenv.env['REFRESH_ENDPOINT'] ?? '/refresh/';
 
   final SecureStorageService _storage = SecureStorageService();
+
+  // Evita redirigir a login varias veces si caducan varias peticiones a la vez
+  static bool _sessionExpiredHandled = false;
+
+  // Guarda la sesion (tokens e id de usuario) que devuelve la api
+  Future<bool> saveSession(Map<String, dynamic>? data) async {
+    if (data == null) return false;
+
+    final access = data['access'];
+    final refresh = data['refresh'];
+    final user = data['user'];
+
+    // Se exigen las tres cosas, una respuesta a medias no es una sesion valida
+    if (access == null || refresh == null || user == null || user['id'] == null) {
+      return false;
+    }
+
+    await _storage.saveElement('access_token', access);
+    await _storage.saveElement('refresh_token', refresh);
+    await _storage.saveElement('user_id', user['id']);
+    _sessionExpiredHandled = false; // Nueva sesion valida
+    return true;
+  }
 
   // Funcion para realizar el login, devuelve un mapa con los datos del usuario y los tokens
   Future<Map<String, dynamic>?> login(String username, String password, {String? code}) async {
@@ -45,12 +70,9 @@ class ApiService {
 
     if (response.statusCode == 200) { // Si la api responde con un codigo 200, es que se ha iniciado sesion correctamente
       final data = jsonDecode(response.body); // Se decodifica la respuesta
-      
-      if (data['access'] != null && data['refresh'] != null) { // Se guarda la informacion del usuario y los tokens para futuras peticiones
-        await _storage.saveElement('access_token', data['access']);
-        await _storage.saveElement('refresh_token', data['refresh']);
-        await _storage.saveElement('user_id', data['user']['id']);
-      }
+
+      // Se guarda la informacion del usuario y los tokens para futuras peticiones
+      await saveSession(data);
 
       return data;
     } 
@@ -85,10 +107,8 @@ class ApiService {
     if (response.body.isEmpty) return null;
     final data = jsonDecode(response.body);
     // Si la respuesta es correcta, se guardan los tokens y el id del usuario
-    if (response.statusCode == 200 && data['access'] != null) {
-      await _storage.saveElement('access_token', data['access']);
-      await _storage.saveElement('refresh_token', data['refresh']);
-      await _storage.saveElement('user_id', data['user']['id']);
+    if (response.statusCode == 200) {
+      await saveSession(data);
     }
     return {'statusCode': response.statusCode, ...data};
   }
@@ -112,10 +132,8 @@ class ApiService {
     if (response.body.isEmpty) return null;
     final data = jsonDecode(response.body);
     // Si la respuesta es correcta, se guardan los tokens y el id del usuario
-    if (response.statusCode == 200 && data['access'] != null) {
-      await _storage.saveElement('access_token', data['access']);
-      await _storage.saveElement('refresh_token', data['refresh']);
-      await _storage.saveElement('user_id', data['user']['id']);
+    if (response.statusCode == 200) {
+      await saveSession(data);
     }
     return {'statusCode': response.statusCode, ...data};
   }
@@ -178,8 +196,10 @@ class ApiService {
     http.Response response = await makeRequest();
 
     if (response.statusCode == 401) { // SI da un error 401 (unautorized) es porque el token ha expirado, se solicita un nuevo token y se vuelve a hacer la peticion
-      await requestNewToken();
-      response = await makeRequest(); 
+      final refreshed = await requestNewToken();
+      if (refreshed) {
+        response = await makeRequest();
+      }
     }
 
     if (response.statusCode >= 200 && response.statusCode < 300) { // Si es un codigo entre 200 y 300 es que ha ido bien
@@ -207,29 +227,61 @@ class ApiService {
     }
   }
 
-  // Funcion para solicitar un nuevo token, devueñve true si se ha obtenido uno nuevo, o falso en caso contrario
+  // Funcion para solicitar un nuevo token, devuelve true si se ha obtenido uno nuevo, o false en caso contrario
   Future <bool> requestNewToken() async {
     // Creacion de la url
     final url = Uri.parse(baseUrl + refreshEndpoint);
     // Se carga el token de refresco
     String? refreshToken = await _storage.getElement("refresh_token");
+    // Sin refresh token no hay sesion que renovar
+    if (refreshToken == null || refreshToken.isEmpty) {
+      await _handleSessionExpired();
+      return false;
+    }
     // Se codifica el token en un JSON
     String jsonBody = jsonEncode({
       'refresh': refreshToken,
     });
     // Se realiza la peticion a la api
-    final response = await http.post(
-      url,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonBody,
-    );
+    http.Response response;
+    try {
+      response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonBody,
+      );
+    } 
+    catch (_) {
+      return false;
+    }
     if (response.statusCode == 200) { // Si el codigo es 200, se ha realizado correctamente
       final data = jsonDecode(response.body);
       await _storage.saveElement('access_token', data['access']);
       await _storage.saveElement('refresh_token', data['refresh']);
+      _sessionExpiredHandled = false; // Hay una sesion valida de nuevo
       return true;
-    } 
+    }
+    if (response.statusCode == 401) {
+      // El refresh token ya no es valido, ha expirado, revocado... por lo que la sesion se da por terminada
+      await _handleSessionExpired();
+    }
     return false;
+  }
+
+  // Cierra la sesion cuando el refresh token deja de ser valido
+  //borra los datos guardados y lleva al usuario a la pantalla de login
+  // Se protege con un flag para no navegar varias veces si fallan varias peticiones a la vez
+  Future<void> _handleSessionExpired() async {
+    if (_sessionExpiredHandled) return;
+    _sessionExpiredHandled = true;
+    await _storage.deleteAll();
+    final navigator = navigatorKey.currentState;
+    if (navigator != null) {
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    }
   }
 
   // Funcion para obtener la imagen de perfil del usuario

@@ -1,52 +1,55 @@
 import logging
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.pagination import PageNumberPagination
-from django_filters.rest_framework import DjangoFilterBackend
-from users.models import Users, UserType, Notifications, PrefTypes, Preferences, Criteria, DriverRatings, EnvTypes, Vehicles, Device
-from travels.models import RequestTravels, Travel
-from api.serializers.user_serializer import UserTypeSerializer, UserSerializer, NotificationsSerializer, PrefTypesSerializer, \
-    PreferencesSerializer, CriteriaSerializer, DriverRatingsSerializer, EnvTypesSerializer, VehicleSerializer, ProfilePicSerializer, \
-    DeviceSerializer
-from api.serializers.travel_serializer import TravelSerializer, RequestTravelsSerializer
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import Http404
+from drf_spectacular.utils import extend_schema
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, MultiPartParser
+from rest_framework.exceptions import APIException, MethodNotAllowed
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from api.errors import ErrorCodes
-from rest_framework import status
-from django.db import connection
-from django.db.models import Q
-import logging
-import os
-from services.email.email_service import Email
-import secrets
-import hashlib
-import string
-from datetime import datetime, timedelta
-from django.utils import timezone
-from decouple import config
-from django.db import transaction
-from rest_framework.parsers import MultiPartParser, FormParser
+from api.serializers.travel_serializer import RequestTravelsSerializer, TravelSerializer
+from api.serializers.user_serializer import (NotificationsSerializer, PreferencesSerializer,
+                                            ProfilePicSerializer, UserSerializer, VehicleSerializer)
+from api.ownership import OwnedQuerysetMixin
 from api.soft_delete import SoftDeleteQuerysetMixin
+from users.models import Users
+from users.services.auth_service import EMAIL_DOMAIN_ERROR_MESSAGE, AuthService
+from users.services.exceptions import (EmailAlreadyRegisteredError,EmailDeliveryError,EmailDomainNotAllowedError,
+    IncorrectPasswordError,InvalidTokenError,NoUpcomingTravelsError,RequestStatusMissingError,
+    RequestTravelNotValidatedError,TokenExpiredError,UserNotFoundError)
+from users.services.user_service import UserService
 
 # Logger para almacenar los logs
 logger = logging.getLogger(__name__)
 
-# Endpoints para gestionar los tipos de usuario
-class UserTypeViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
-    queryset = UserType.objects.all()
-    serializer_class = UserTypeSerializer
-    permission_classes = [IsAuthenticated]
 
-# Endpoints para gestionar los usuarios
-class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
+# Endpoints de la cuenta del propio usuario.
+class UsersViewSet(OwnedQuerysetMixin, SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
     queryset = Users.objects.all()
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
+    # EL dueño del registro es el propio registro
+    owner_field = 'id'
 
     lookup_field = 'id'
     lookup_url_kwarg = 'id'
     lookup_value_regex = '[0-9a-f-]{36}'
 
+    # No se utiliza put, por lo que no se pone
+    http_method_names = ['get', 'post', 'patch', 'delete', 'head', 'options']
+
+    # Sin ambito por defecto
+    throttle_scope = None
+
+    @extend_schema(exclude=True)
+    def create(self, request, *args, **kwargs):
+        """
+        POST /api/v1/users/ no existe. El alta es con POST /api/v1/register/.
+        Este endpoint lo genera automaticamente Django, por lo que se cierra
+        """
+        raise MethodNotAllowed('POST')
 
     # Se sobreescriben los metodos list y retrieve para añadir logs y manejo de errores
     def list(self, request, *args, **kwargs):
@@ -55,6 +58,8 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
             response = super().list(request, *args, **kwargs)
             logger.info("Successfully retrieved user list")
             return response
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error in UsersViewSet list endpoint: {str(e)}")
             return Response({"error": "An error occurred while retrieving the user list", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -65,6 +70,8 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
             response = super().retrieve(request, *args, **kwargs)
             logger.info(f"Successfully retrieved user ID: {kwargs.get('id')}")
             return response
+        except Http404:
+            raise
         except Exception as e:
             logger.error(f"Error in UsersViewSet retrieve endpoint for user ID {kwargs.get('id')}: {str(e)}")
             return Response({"error": "An error occurred while retrieving the user", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -99,10 +106,11 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
             profile_picture = request.data['profile_picture']
             serializer = ProfilePicSerializer(data={"profile_picture": profile_picture})
             serializer.is_valid(raise_exception=True)
-            user.profile_picture = profile_picture
-            user.save()
-            logger.info(f"Profile picture updated for user ID: {user.id}")
-            return Response({"message": "Profile picture updated successfully", "name" : f"{user.profile_picture.name.split('/')[-1]}"}, status=status.HTTP_200_OK)
+
+            name = UserService.update_profile_picture(user, profile_picture)
+            return Response({"message": "Profile picture updated successfully", "name": name}, status=status.HTTP_200_OK)
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error in upload_profile_pic endpoint for user ID {user.id}: {str(e)}")
             return Response({"error": "An error occurred while uploading the profile picture", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -123,15 +131,8 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         user = self.get_object()
 
         # Si no habia imagen de perfil, se debe devolver un mensaje de exito, ya que esta lo que queria, eliminar la imagen
-        if not user.profile_picture:
+        if not UserService.delete_profile_picture(user):
             return Response({"message": "No profile picture to delete"}, status=status.HTTP_200_OK)
-
-        # Se debe eliminar el archivo
-        user.profile_picture.delete(save=False)
-
-        # Se actualiza la bbdd
-        user.profile_picture = None
-        user.save()
 
         return Response({
             "message": "Profile picture deleted successfully",
@@ -152,11 +153,12 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         logger.info(f"Accessed get_vehicles endpoint for user ID: {user.id}")
 
         try:
-            qs = user.vehicles.filter(is_deleted=False)
             return self.paginated_response(
-                request, qs, VehicleSerializer,
+                request, UserService.list_vehicles(user), VehicleSerializer,
                 f"Returned vehicles for user ID: {user.id}"
             )
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error in get_vehicles: {str(e)}")
             return Response({"error": "Error retrieving vehicles", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=500)
@@ -177,12 +179,12 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
 
         try:
             ordering = request.query_params.get('ordering', 'desc')
-            order_field = 'date' if ordering == 'asc' else '-date'
-            qs = user.notifications.filter(is_deleted=False).order_by(order_field)
             return self.paginated_response(
-                request, qs, NotificationsSerializer,
+                request, UserService.list_notifications(user, ordering), NotificationsSerializer,
                 f"Returned notifications for user ID: {user.id}"
             )
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error in get_notifications: {str(e)}")
             return Response({"error": "Error retrieving notifications", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=500)
@@ -202,8 +204,9 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         logger.info(f"Accessed get_unread_notifications_count endpoint for user ID: {user.id}")
 
         try:
-            count = user.notifications.filter(is_deleted=False, read=False).count()
-            return Response({"count": count})
+            return Response({"count": UserService.count_unread_notifications(user)})
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error in get_unread_notifications_count: {str(e)}")
             return Response({"error": "Error retrieving unread notifications count", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=500)
@@ -223,25 +226,9 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         logger.info(f"Accessed get_driverratings endpoint for user ID: {user.id}")
 
         try:
-            # Las valoraciones se obtienen mediante un stored procedure de bbdd
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT code, avg_score, num_ratings FROM public.getdriverratings(%s)", [str(user.id)])
-                results = cursor.fetchall()
-            if not results: # Si no hay resultados, se devuelve 0
-                return Response({"results":{
-                    "none" : 0},
-                    "count" :0},status.HTTP_200_OK)
-
-            data = {
-                "results":{
-                    row[0]: float(row[1]) if row[1] is not None else None
-                    for row in results
-                    },
-                "count": float(results[0][2]) if results[0][2] is not None else None,
-            }
-
-            return Response(data, status=200)
-
+            return Response(UserService.get_driver_ratings(user), status=200)
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error in get_driverratings: {str(e)}")
             return Response({"error": "Error retrieving driverratings", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=500)
@@ -261,11 +248,12 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         logger.info(f"Accessed get_preferences endpoint for user ID: {user.id}")
 
         try:
-            qs = user.preferences.filter(is_deleted=False).order_by('pref_type')
             return self.paginated_response(
-                request, qs, PreferencesSerializer,
+                request, UserService.list_preferences(user), PreferencesSerializer,
                 f"Returned preferences for user ID: {user.id}"
             )
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error in get_preferences: {str(e)}")
             return Response({"error": "Error retrieving preferences", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=500)
@@ -289,26 +277,11 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
 
         logger.info(f"Accessed update_preferences endpoint for user ID: {user.id} with preferences: {pref_codes}")
         try:
-            # Se sacan las preferencias a partir de los codigos
-            valid_pref_types = PrefTypes.objects.filter(
-                code__in=pref_codes,
-                is_deleted=False
-            )
-
-            # Se deben borrar las que ya hay
-            Preferences.objects.filter(id_user=user).delete()
-
-            # Se añaden las nuevas preferencias
-            new_prefs = [
-                Preferences(id_user=user, pref_type=pt)
-                for pt in valid_pref_types
-            ]
-            Preferences.objects.bulk_create(new_prefs)
-
-            logger.info(f"Preferences updated successfully for user ID: {user.id}")
-
+            UserService.update_preferences(user, pref_codes)
             return Response({"message": "Preferencias actualizadas"}, status=200)
 
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error: {str(e)}")
             return Response({"error": "Error al actualizar preferencias", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=500)
@@ -327,7 +300,7 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         """
         user = self.get_object()
         logger.info(f"Accessed clear_preferences endpoint for user ID: {user.id}")
-        user.preferences.clear()
+        UserService.clear_preferences(user)
         return Response({"message": "All preferences cleared"}, status=status.HTTP_200_OK)
 
     @action(
@@ -341,7 +314,6 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         Endpoint GET /users/{id}/travel/?type=pending|past
         Devuelve los viajes creados por el usuario filtrando pasados o futuros segun el parametro type
         """
-
         user = self.get_object()
 
         # Si no se especifica, se devuelven todos
@@ -349,28 +321,16 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
 
         logger.info(f"Accessed get_travels endpoint for user ID: {user.id} with param: {travel_type}")
 
-        # Se fija la fecha actual para saber si deben devolverse los futuros o pasados
-        today = timezone.now().date()
-
         try:
-            qs = user.created_travels.filter(is_deleted=False)
-
-            if travel_type == 'pending':
-                qs = qs.filter(
-                    Q(travel_date__gte=today, state__code='active') | Q(state__code='started')
-                ).order_by('travel_date')
-
-            elif travel_type == 'past':
-                qs = qs.filter(
-                    Q(travel_date__lt=today) | Q(state__code='fnd')
-                ).order_by('-travel_date')
-
+            qs = UserService.list_created_travels(user, travel_type)
             logger.info(f"Successfully retrieved travels for user ID: {user.id} with type: {travel_type}")
             return self.paginated_response(
                 request, qs, TravelSerializer,
                 f"Returned {travel_type} travels for user ID: {user.id}"
             )
 
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error in get_travels: {str(e)}")
             return Response({"error": "Error retrieving travels", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=500)
@@ -391,30 +351,8 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
 
         logger.info(f"Accessed my_requests for user ID: {user.id} with type: {request_type}")
 
-        today = timezone.now().date()
-
         try:
-            # Se sacan las solicitudes del usuario
-            qs = user.requested_travels.filter(is_deleted=False)
-
-            # Si son pending, se sacan las que estan pendientes de aprobar
-            if request_type == 'pending':
-                qs = qs.filter(
-                        status__code__in=['pending','rejected'],
-                        id_travel__travel_date__gte=today
-                    ).order_by('id_travel__travel_date')
-
-            elif request_type == 'active':
-                # Si son active, se sacan las que estan aceptadas pero aun no se ha realizado el viaje
-                qs = qs.filter(
-                        status__code='accepted',
-                    ).order_by('id_travel__travel_date')
-
-            elif request_type == 'past': # Si son past, son las solicitudes que ya se han realizado
-                qs = qs.filter(
-                        status__code__in=['validated', 'unvalidated'],
-                    ).order_by('-id_travel__travel_date')
-
+            qs = UserService.list_own_requests(user, request_type)
             logger.info(f"Successfully retrieved {request_type} requests for user ID: {user.id}")
 
             return self.paginated_response(
@@ -422,6 +360,8 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
                 f"Returned {request_type} requests for user ID: {user.id}"
             )
 
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error in my_requests: {str(e)}")
             return Response({"error": "Error retrieving your requests", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=500)
@@ -442,55 +382,43 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         logger.info(f"Accessed received_requests for user ID: {user.id}")
 
         try:
-            # Se buscan las solicitudes recibidas cuyo creador sea el usuario y esten pendientes de aprobar y se ordenan de mas reciente a menos
-            qs = RequestTravels.objects.filter(
-                id_travel__creation_user=user,
-                status__code='pending',
-                is_deleted=False
-            ).order_by('-created_at')
-
             return self.paginated_response(
-                request, qs, RequestTravelsSerializer,
+                request, UserService.list_received_requests(user), RequestTravelsSerializer,
                 f"Returned pending received requests for user ID: {user.id}"
             )
 
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error in received_requests: {str(e)}")
             return Response({"error": "Error retrieving received requests", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=500)
 
     # Funcion para paginar las respuestas de los endpoints
     def paginated_response(self, request, queryset, serializer_class, log_msg):
+        context = self.get_serializer_context()
+
         page = self.paginate_queryset(queryset)
         if page is not None:
-            serializer = serializer_class(page, many=True)
+            serializer = serializer_class(page, many=True, context=context)
             logger.info(log_msg + f" (page {request.query_params.get('page', 1)})")
             return self.get_paginated_response(serializer.data)
 
-        serializer = serializer_class(queryset, many=True)
+        serializer = serializer_class(queryset, many=True, context=context)
         return Response(serializer.data)
-
-    # Funcion para generar un token de 6 caracteres alfanumericos aleatorios, se devuelve el token y su hash
-    def generate_token(self):
-        token = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(6))
-        token_hash = hashlib.sha256(token.encode()).hexdigest()
-        return token, token_hash
-
-    # Funcion que dado un codigo verifica que su hash coincida con el que esta almacenado
-    def verify_token(self, user_input, stored_hash):
-        input_hash = hashlib.sha256(user_input.encode()).hexdigest()
-        return input_hash == stored_hash
 
     @action(
         detail=False,
         methods=['post'],
         url_path='verification_email',
-        permission_classes=[]
+        permission_classes=[],
+        throttle_scope='verification_email'
     )
     def get_verification_email(self, request, *args, **kwargs):
         """
         Endpoint POST /users/verification_email/
         Envia un mensaje de confirmacion al email del usuario especificado
-        Si se envia además el email, envia el correo de verificacion a ese email
+        Si se envia además el email, envia el correo de verificacion a ese email,
+        pero solo si quien llama esta autenticado y es el dueño de la cuenta
         El nombre de usuario es obligatorio
         """
 
@@ -505,24 +433,31 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
 
         try:
             # El usuario debe existir
-            user = Users.objects.get(username=username, is_deleted=False) if '@' not in username else Users.objects.get(email=username, is_deleted=False)
-        except Users.DoesNotExist:
+            user = UserService.find_by_username_or_email(username)
+        except UserNotFoundError:
             return Response({"error": "User not found", "error_code": ErrorCodes.USER_DONT_EXIST}, status=status.HTTP_404_NOT_FOUND)
 
-        token, hashed_token = self.generate_token()
+        # El destino del codigo no lo elige quien llama.
+        # Se admite una direccion distinta a la de la cuenta unicamente cuando el que la pide esta autenticado
+        # y es el dueño de esa cuenta, que es el flujo de cambio de correo desde el perfil
+        if email and not (request.user.is_authenticated and request.user == user):
+            logger.warning(f"Rejected verification email for username {username}: the caller is not the owner of the account")
+            return Response({"error": "Authentication as the owner is required to choose the destination address", "error_code": ErrorCodes.INSUFICIENT_CREDENTIALS}, status=status.HTTP_403_FORBIDDEN)
+
+        if email:
+            try:
+                AuthService.assert_email_domain_is_allowed(email)
+            except EmailDomainNotAllowedError:
+                return Response({"error": EMAIL_DOMAIN_ERROR_MESSAGE, "error_code": ErrorCodes.EMAIL_DOMAIN_NOT_ALLOWED}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            email_service = Email()
-            # Se envia el email al email del usuario o al que haya pasado como parametro
-            email_service.send_verification_email(to=email if email else user.email, token=token)
-            user.token = hashed_token
-            user.token_expiration = timezone.now() + timedelta(minutes=config('TOKEN_EXPIRATION_TIME', cast=int, default=5))
-            user.save()
-
-            logger.info(f"Token generated for user ID: {user.id}")
-
+            AuthService.send_verification_code(user, to_email=email)
             return Response({"status": "OK"}, status=status.HTTP_200_OK)
 
+        except EmailDeliveryError:
+            return Response({"error": "Error sending verification email", "error_code": ErrorCodes.EMAIL_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error in get_verification_email: {str(e)}")
             return Response({"error": "Error sending verification email", "error_code": ErrorCodes.EMAIL_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -531,7 +466,8 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         detail=False,
         methods=['post'],
         url_path='verify_code',
-        permission_classes=[]
+        permission_classes=[],
+        throttle_scope='verify_code'
     )
     def post_verify_code(self, request, *args, **kwargs):
         """
@@ -541,7 +477,6 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         Si se pasa la contraseña, se cambia la contraseña del usuario a esa (si el token es correcto)
         Si se pasa el parametro validate con valor true, se marca el usuario como verificado (si el token es correcto)
         El nombre de usuario y token son obligatorios
-        Devuelve el token generado
         """
         username = request.data.get("username")
         token = request.data.get("token")
@@ -556,28 +491,41 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
             return Response({"error": "username and token query param are required", "error_code": ErrorCodes.MISSING_REQUIRED_FIELD}, status=status.HTTP_400_BAD_REQUEST)
 
         try: # Si el usuario no existe, se devuelve un error
-            user = Users.objects.get(username=username, is_deleted=False) if '@' not in username else Users.objects.get(email=username, is_deleted=False)
-        except Users.DoesNotExist:
+            user = UserService.find_by_username_or_email(username)
+        except UserNotFoundError:
             return Response({"error": "User not found", "error_code": ErrorCodes.USER_DONT_EXIST}, status=status.HTTP_404_NOT_FOUND)
 
-        # Si el token ha expirado, se devuelve un error
-        if user.token_expiration < timezone.now():
-            return Response({"error": "Token expired", "error_code": ErrorCodes.TOKEN_EXPIRED}, status=status.HTTP_400_BAD_REQUEST)
+        # Cambiar el correo de la cuenta solo puede hacerlo su dueño autenticado
+        if email and not (request.user.is_authenticated and request.user == user):
+            logger.warning(f"Rejected email change for username {username}: the caller is not the owner of the account")
+            return Response({"error": "Authentication as the owner is required to change the email", "error_code": ErrorCodes.INSUFICIENT_CREDENTIALS}, status=status.HTTP_403_FORBIDDEN)
+        was_unverified = not user.is_verify
 
-        # Si el token no coincide, se devuelve un error
-        if not self.verify_token(token, user.token):
-            return Response({"error": "Invalid token", "error_code": ErrorCodes.INCORRECT_TOKEN}, status=status.HTTP_400_BAD_REQUEST)
-        try: # Si todo esta correcto, se actualizan los valores
-            if email:
-                user.email = email
-            if password:
-                user.set_password(password)
-            if validate:
-                user.is_verify = True
-            user.save()
-            logger.info(f"Post_verify_code successful. User data updated successfully for user ID: {user.id}")
+        try:
+            user = AuthService.consume_verification_code(
+                user, token, email=email, password=password, validate=validate
+            )
+
+            if validate and was_unverified and not email and not password:
+                logger.info(f"Registration completed, issuing session for user ID: {user.id}")
+                return Response(
+                    {"status": "OK", **AuthService.build_auth_payload(user)},
+                    status=status.HTTP_200_OK
+                )
+
             return Response({"status": "OK"}, status=status.HTTP_200_OK)
 
+        except TokenExpiredError:
+            return Response({"error": "Token expired", "error_code": ErrorCodes.TOKEN_EXPIRED}, status=status.HTTP_400_BAD_REQUEST)
+        except InvalidTokenError:
+            return Response({"error": "Invalid token", "error_code": ErrorCodes.INCORRECT_TOKEN}, status=status.HTTP_400_BAD_REQUEST)
+        except EmailDomainNotAllowedError:
+            return Response({"error": EMAIL_DOMAIN_ERROR_MESSAGE, "error_code": ErrorCodes.EMAIL_DOMAIN_NOT_ALLOWED}, status=status.HTTP_400_BAD_REQUEST)
+        except EmailAlreadyRegisteredError:
+            # El correo nuevo ya lo tiene otra cuenta activa (ver §2.10)
+            return Response({"error": "Email already in use", "error_code": ErrorCodes.EMAIL_ALREADY_EXISTS}, status=status.HTTP_409_CONFLICT)
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error in post_verify_code: {str(e)}")
             return Response({"error": "Error changing user data", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -586,7 +534,8 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         detail=False,
         methods=['get'],
         url_path='exist_email',
-        permission_classes=[IsAuthenticated]
+        permission_classes=[IsAuthenticated],
+        throttle_scope='user_lookup'
     )
     def get_exist_email(self, request, *args, **kwargs):
         """
@@ -601,20 +550,20 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         if not email:
             return Response({"error": "email query param is required", "error_code": ErrorCodes.MISSING_REQUIRED_FIELD}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            user = Users.objects.get(email=email, is_deleted=False)
-        except Users.DoesNotExist:
-            logger.info(f"The email {email} is not in use")
-            return Response({"status": "OK"}, status=status.HTTP_200_OK)
-        logger.info(f"The email {email} is in use")
-        return Response({"status": "KO"}, status=status.HTTP_200_OK)
+        if AuthService.email_is_taken(email):
+            logger.info(f"The email {email} is in use")
+            return Response({"status": "KO"}, status=status.HTTP_200_OK)
+
+        logger.info(f"The email {email} is not in use")
+        return Response({"status": "OK"}, status=status.HTTP_200_OK)
 
 
     @action(
         detail=False,
         methods=['get'],
         url_path='verify_user',
-        permission_classes=[]
+        permission_classes=[],
+        throttle_scope='user_lookup'
     )
     def get_verify_user(self, request, *args, **kwargs):
         """
@@ -630,8 +579,8 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
         if not email or not username:
             return Response({"error": "Both email and username query params are required", "status": "KO", "error_code": ErrorCodes.MISSING_REQUIRED_FIELD}, status=status.HTTP_400_BAD_REQUEST)
 
-        email_taken = Users.objects.filter(email=email, is_deleted=False).exists()
-        user_taken = Users.objects.filter(username=username, is_deleted=False).exists()
+        email_taken = AuthService.email_is_taken(email)
+        user_taken = AuthService.username_is_taken(username)
 
         if email_taken or user_taken:
             logger.info(f"Email taken: {email_taken} or username taken: {user_taken}")
@@ -653,7 +602,7 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
     )
     def post_rate_a_driver(self, request, *args, **kwargs):
         """
-        Endpoint POST /users/rate_a_driver/
+        Endpoint POST /users/{id}/rate_a_driver/
         Permite valorar a un conductor tras haber realizado un viaje con el
         """
         results = request.data.get('results')
@@ -663,38 +612,18 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
             logger.error("results and request_travel fields are required in the request body")
             return Response({"error": "results and request_travel fields are required", "error_code": ErrorCodes.MISSING_REQUIRED_FIELD}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Valida que el usuario tiene ese request_travel en estado validated
-        travel = RequestTravels.objects.filter(id=request_travel, user=self.get_object(), status__code='validated').first()
-        if not travel:
-            logger.error("The specified request_travel is not found or not in the correct status")
-            return Response({"error": "The specified request_travel is not found or not in the correct status", "error_code": ErrorCodes.TRAVEL_DONT_EXIST}, status=status.HTTP_400_BAD_REQUEST)
-
-        driver = travel.id_travel.creation_user
+        user = self.get_object()
 
         try:
-            with transaction.atomic():
-                for criteria_code, score in results.items():
-                    # Se va puntuando por cada criterio
-                    criteria_obj = Criteria.objects.filter(code=criteria_code).first()
-                    if not criteria_obj:
-                        logger.error(f"Criteria '{criteria_code}' not found, skipping.")
-                        continue
-                    DriverRatings.objects.create(
-                        id_user=self.get_object(),
-                        id_driver=driver,
-                        criteria=criteria_obj,
-                        score=score
-                    )
-                # Se cambia el estado a invalidado para que ya no se pueda valorar de nuevo ese viaje
-                unvalidated_status = travel.status.__class__.objects.filter(code='unvalidated').first()
-                if unvalidated_status:
-                    travel.status = unvalidated_status
-                    travel.save()
-                else:
-                    logger.error("Unvalidated status not found, unable to update request_travel status.")
-                    return Response({"error": "Unvalidated status not found", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            logger.info(f"Driver ratings saved successfully for user ID: {self.get_object().id} and driver ID: {driver.id}")
+            UserService.rate_driver(user, request_travel, results)
             return Response({"status": "OK"}, status=status.HTTP_200_OK)
+
+        except RequestTravelNotValidatedError:
+            return Response({"error": "The specified request_travel is not found or not in the correct status", "error_code": ErrorCodes.TRAVEL_DONT_EXIST}, status=status.HTTP_400_BAD_REQUEST)
+        except RequestStatusMissingError:
+            return Response({"error": "Unvalidated status not found", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error saving driver ratings: {str(e)}")
             return Response({"error": "Error saving driver ratings", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -703,12 +632,31 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
     @action(
         detail=True,
         methods=['post'],
+        url_path='logout',
+        permission_classes=[IsAuthenticated]
+    )
+    def post_logout(self, request, *args, **kwargs):
+        """
+        Endpoint POST /users/{id}/logout/
+        Cierra la sesion invalidando todos los tokens emitidos hasta ahora
+        Cierra todas las sesiones de la cuenta, no solo la del dispositivo que llama
+        """
+        user = self.get_object()
+        logger.info(f"Accessed logout endpoint for user ID: {user.id}")
+
+        AuthService.revoke_all_sessions(user)
+
+        return Response({"status": "OK"}, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True,
+        methods=['post'],
         url_path='change_password',
         permission_classes=[IsAuthenticated]
         )
     def post_change_password(self, request, *args, **kwargs):
-        """ 
-        Endpoint POST /users/change_password/
+        """
+        Endpoint POST /users/{id}/change_password/
         Permite cambiar la contraseña de un usuario
         Recibe la contraseña actual y la nueva contraseña
         """
@@ -721,205 +669,109 @@ class UsersViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
 
         user = self.get_object()
 
-        if not user.check_password(current_password):
-            logger.warning(f"Incorrect current password provided for user ID: {user.id}")
+        try:
+            UserService.change_password(user, current_password, new_password)
+
+            # Cambiar la contraseña revoca TODAS las sesiones de la cuenta
+            return Response(
+                {"status": "OK", **AuthService.build_auth_payload(user)},
+                status=status.HTTP_200_OK,
+            )
+
+        except IncorrectPasswordError:
             return Response({"error": "Incorrect current password", "error_code": ErrorCodes.INVALID_CREDENTIALS}, status=status.HTTP_400_BAD_REQUEST)
 
-        user.set_password(new_password)
-        user.save()
-        logger.info(f"Password changed successfully for user ID: {user.id}")
-        return Response({"status": "OK"}, status=status.HTTP_200_OK)
-    
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='two_factor/challenge',
+        permission_classes=[IsAuthenticated],
+        throttle_scope='two_factor'
+    )
+    def post_two_factor_challenge(self, request, *args, **kwargs):
+        """
+        Endpoint POST /users/{id}/two_factor/challenge/
+        Arranca el cambio del segundo factor y responde con lo que hay que
+        presentar para confirmarlo: la contraseña actual, o un codigo que se
+        acaba de enviar al correo de la cuenta si esta solo entra por Google
+        Devuelve {"method": "password"} o {"method": "email"}
+        """
+        user = self.get_object()
+        logger.info(f"Accessed two_factor challenge endpoint for user ID: {user.id}")
+
+        try:
+            return Response({"method": AuthService.start_second_factor_change(user)}, status=status.HTTP_200_OK)
+
+        except EmailDeliveryError:
+            return Response({"error": "Error sending verification email", "error_code": ErrorCodes.EMAIL_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='two_factor',
+        permission_classes=[IsAuthenticated],
+        throttle_scope='two_factor'
+    )
+    def post_two_factor(self, request, *args, **kwargs):
+        """
+        Endpoint POST /users/{id}/two_factor/
+        Activa o desactiva la verificacion en dos pasos
+        Recibe enabled y la credencial que pidio el challenge: password o code
+        Devuelve el estado en el que ha quedado el ajuste
+        """
+        enabled = request.data.get('enabled')
+
+        if not isinstance(enabled, bool):
+            logger.error("enabled field is required and must be a boolean")
+            return Response({"error": "enabled field is required and must be a boolean", "error_code": ErrorCodes.MISSING_REQUIRED_FIELD}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = self.get_object()
+        logger.info(f"Accessed two_factor endpoint for user ID: {user.id} with enabled: {enabled}")
+
+        try:
+            user = AuthService.set_second_factor(
+                user, enabled,
+                password=request.data.get('password'),
+                code=request.data.get('code'),
+            )
+            return Response(
+                {
+                    "status": "OK",
+                    "has_2FA": user.has_2FA,
+                    **AuthService.build_auth_payload(user),
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except IncorrectPasswordError:
+            return Response({"error": "Incorrect current password", "error_code": ErrorCodes.INVALID_CREDENTIALS}, status=status.HTTP_400_BAD_REQUEST)
+        except TokenExpiredError:
+            return Response({"error": "Token expired", "error_code": ErrorCodes.TOKEN_EXPIRED}, status=status.HTTP_400_BAD_REQUEST)
+        except InvalidTokenError:
+            return Response({"error": "Invalid token", "error_code": ErrorCodes.INCORRECT_TOKEN}, status=status.HTTP_400_BAD_REQUEST)
+
     @action(
         detail=True,
         methods=['get'],
         url_path='next_travel',
         permission_classes=[IsAuthenticated]
-        )
+    )
     def get_next_travel(self, request, *args, **kwargs):
         """
-        Endpoint GET /users/next_travel/
-        Devuelve el siguiente viaje activo del usuario, si no tiene devuelve null
+        Endpoint GET /users/{id}/next_travel/
+        Devuelve los siguientes viajes activos del usuario, si no tiene devuelve un 404
         """
         user = self.get_object()
-        today = timezone.now().date()
-        max_travels = 3
 
         logger.info(f"Accessed get_next_travel endpoint for user ID: {user.id}")
 
         try:
-            started_travel = user.created_travels.filter(state='started', is_deleted=False).order_by('travel_date').first()
+            return Response({"results": UserService.get_next_travels(user)}, status=status.HTTP_200_OK)
 
-            remaining = max_travels - (1 if started_travel else 0)
-
-            created_travels = list(user.created_travels.filter(state='active', is_deleted=False).order_by('travel_date')[:remaining])
-
-            requested_reqs = list(
-                RequestTravels.objects.filter(
-                    user=user,
-                    status__code='accepted',
-                    id_travel__travel_date__gte=today,
-                    id_travel__state='active',
-                    id_travel__is_deleted=False,
-                    is_deleted=False,
-                ).order_by('id_travel__travel_date').select_related('id_travel', 'status')[:remaining]
-            )
-            
-            # Se combinan los viajes creados y solicitados, para sacar los siguientes 3 viajes
-            candidates = [(t, False, None) for t in created_travels] + [(req.id_travel, True, req) for req in requested_reqs]
-            candidates.sort(key=lambda x: x[0].travel_date)
-            candidates = candidates[:remaining]
-
-            if started_travel:
-                candidates = [(started_travel, False, None)] + candidates
-
-            if not candidates:
-                logger.info(f"No travels found for user ID: {user.id}")
-                return Response({"error": "No upcoming travels found", "error_code": ErrorCodes.TRAVEL_DONT_EXIST}, status=status.HTTP_404_NOT_FOUND)
-
-            result = []
-            for travel, is_request, req_obj in candidates:
-                result.append({
-                    "id": req_obj.id if is_request else travel.id_travel,
-                    "data": TravelSerializer(travel).data,
-                    "is_request": is_request,
-                    "code": req_obj.validation_code if is_request else None,
-                    "status": req_obj.status.code if is_request else travel.state.code,
-                })
-
-            logger.info(f"Next travels retrieved successfully for user ID: {user.id}")
-            return Response({"results": result}, status=status.HTTP_200_OK)
-
-
+        except NoUpcomingTravelsError:
+            return Response({"error": "No upcoming travels found", "error_code": ErrorCodes.TRAVEL_DONT_EXIST}, status=status.HTTP_404_NOT_FOUND)
+        except (Http404, APIException, DjangoValidationError):
+            raise
         except Exception as e:
             logger.error(f"Error in get_next_travel: {str(e)}")
             return Response({"error": "Error retrieving next travel", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=500)
-
-# Endpoints para gestionar las notificaciones
-class NotificationsViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
-    queryset = Notifications.objects.all()
-    serializer_class = NotificationsSerializer
-    permission_classes = [IsAuthenticated]
-
-# Endpoints para gestionar los dispositivos registrados para notificaciones push
-class DeviceViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
-    queryset = Device.objects.all()
-    serializer_class = DeviceSerializer
-    permission_classes = [IsAuthenticated]
-
-    # Si el dispositivo ya existe, se actualiza, si no, se crea
-    def create(self, request, *args, **kwargs):
-        # coge el token fcm 
-        fcm_token = request.data.get('fcm_token')
-        if not fcm_token: # si no hay token, devuelve un error
-            return Response(
-                {"error": "fcm_token is required", "error_code": ErrorCodes.MISSING_REQUIRED_FIELD},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Actualiza o crea el dispositivo con el token fcm y el usuario actual
-        device, _ = Device.objects.update_or_create(
-            fcm_token=fcm_token,
-            defaults={
-                'id_user': request.user,
-                'platform': request.data.get('platform', ''),
-                'is_deleted': False,
-            }
-        )
-        serializer = self.get_serializer(device)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-# Endpoints para gestionar los tipos de preferencias
-class PrefTypesViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
-    queryset = PrefTypes.objects.all()
-    serializer_class = PrefTypesSerializer
-    permission_classes = [IsAuthenticated]
-
-# Endpoints para gestionar las preferencias de los usuarios
-class PreferencesViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
-    queryset = Preferences.objects.all()
-    serializer_class = PreferencesSerializer
-    permission_classes = [IsAuthenticated]
-
-# Endpoints para gestionar los criterios de valoracion de los conductores
-class CriteriaViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
-    queryset = Criteria.objects.all()
-    serializer_class = CriteriaSerializer
-    permission_classes = [IsAuthenticated]
-
-# Endpoints para gestionar las valoraciones de los conductores
-class DriverRatingsViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
-    queryset = DriverRatings.objects.all()
-    serializer_class = DriverRatingsSerializer
-    permission_classes = [IsAuthenticated]
-
-# Endpoints para gestionar los tipos de etiquetas medioambientales
-class EnvTypesViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
-    queryset = EnvTypes.objects.all()
-    serializer_class = EnvTypesSerializer
-    permission_classes = [IsAuthenticated]
-
-# Endpoints para gestionar los vehiculos de los usuarios
-class VehiclesViewSet(SoftDeleteQuerysetMixin, viewsets.ModelViewSet):
-    queryset = Vehicles.objects.all()
-    serializer_class = VehicleSerializer
-    permission_classes = [IsAuthenticated]
-
-    # Se sobreescribe el metodo partial_update para poder hacer las comprobaciones de asientos necesarias al actualizar un vehiculo
-    def partial_update(self, request, *args, **kwargs):
-        vehicle = self.get_object()
-        new_seats = request.data.get('seats')
-        # Los asientos deben estar entre 2 y 31, y no pueden ser menos que las plazas publicadas para alguno de los viajes asociados a ese vehiculo
-        if new_seats is not None:
-            try:
-                new_seats = int(new_seats)
-                if new_seats < 2:
-                    logger.error("Number of seats cannot be less than 2")
-                    return Response({"error": "El numero de asientos no puede ser menor que 2", "error_code": ErrorCodes.VEHICLE_SEATS_INSUFFICIENT}, status=status.HTTP_400_BAD_REQUEST)
-            except ValueError:
-                return Response({"error": "Numero de asientos invalido", "error_code": ErrorCodes.MISSING_REQUIRED_FIELD}, status=status.HTTP_400_BAD_REQUEST)
-            try:
-                if Travel.objects.filter(creation_user=request.user, vehicle_id=vehicle.id_vehicle, num_seats__gt=(new_seats - 1), state='active', is_deleted=False).exists():
-                    logger.error("Number of seats is insufficient for associated travels")
-                    return Response({"error": {"code": ErrorCodes.VEHICLE_SEATS_INSUFFICIENT, "message":
-                        "Tiene algun viaje activo asociado a este vehículo con más asientos que los nuevos, modifique el viaje antes de actualizar el vehículo."}}, status=status.HTTP_400_BAD_REQUEST)
-            except Exception as e:
-                logger.error(f"Error occurred while checking associated travels for seats: {str(e)}")
-                return Response({"error": "Error occurred while checking associated travels for seats", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        else:
-            logger.error("Seats field is required for updating vehicle")
-            return Response({"error": "Numero de asientos invalido", "error_code": ErrorCodes.MISSING_REQUIRED_FIELD}, status=status.HTTP_400_BAD_REQUEST)
-        logger.info(f"Updating vehicle ID: {vehicle.id_vehicle} with new seats: {new_seats}")
-        return super().partial_update(request, *args, **kwargs)
-
-
-    # Se sobreescribe el método destroy para hacer las comprobaciones necesarias antes de borrar el vehiculo
-    def destroy(self, request, *args, **kwargs):
-        """
-        Endpoint DELETE /vehicles/{id_vehicle}/
-        Elimina el vehiculo indicado, siempre que no tenga un viaje asociado a él
-        """
-        vehicle = self.get_object()
-
-        # Solo el dueño del vehiculo puede eliminarlo
-        if vehicle.id_user != request.user:
-            return Response({
-                "status": "error",
-                "message": "No tienes permiso para borrar este vehiculo.",
-                "error_code": ErrorCodes.INSUFICIENT_CREDENTIALS
-            }, status=status.HTTP_403_FORBIDDEN)
-
-        # Solo se peude eliminar si no tiene viajes activos asociados a él
-        try:
-            if Travel.objects.filter(creation_user=request.user, vehicle_id=vehicle.id_vehicle, state='active', is_deleted=False).exists():
-                return Response({
-                    "error": {
-                        "code": ErrorCodes.VEHICLE_ASSOCIATED_TO_TRAVEL,
-                        "message": "El vehículo tiene viajes asociados, sustituyalo en ellos antes de eliminarlo."
-                    }
-                }, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as e:
-            logger.error(f"Error occurred while checking associated travels: {str(e)}")
-            return Response({"error": "Error occurred while checking associated travels", "error_code": ErrorCodes.INTERNAL_SERVER_ERROR}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-        return super().destroy(request, *args, **kwargs)

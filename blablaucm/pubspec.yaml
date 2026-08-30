@@ -59,6 +59,7 @@ dependencies:
   firebase_messaging: ^15.1.6
   flutter_local_notifications: ^18.0.1
   web_socket_channel: ^3.0.1
+  wakelock_plus: ^1.5.2
 
 
 dev_dependencies:
@@ -94,6 +95,7 @@ flutter:
   generate: true
   assets:
     - assets/.env
+    - assets/legal/terms_and_conditions.md
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -9,6 +9,7 @@ import 'package:blablaucm/models/picked_image.dart';
 import 'package:blablaucm/models/enums.dart';
 import 'package:blablaucm/screens/profile_dialogs.dart';
 import 'package:blablaucm/screens/profile_email_flow.dart';
+import 'package:blablaucm/screens/profile_2fa_flow.dart';
 import 'package:blablaucm/providers/storage_provider.dart';
 import 'package:blablaucm/screens/login_screen.dart';
 
@@ -16,7 +17,10 @@ import 'package:blablaucm/screens/login_screen.dart';
 
 class Profile extends StatefulWidget {
   final UserModel user;
-  const Profile({super.key, required this.user});
+  
+  final PickedImage? recoveredImage; // Foto que quedo pendiente porque Android mato la app mientras estaba abierta
+
+  const Profile({super.key, required this.user, this.recoveredImage});
 
   @override
   State<Profile> createState() => _ProfileState();
@@ -27,65 +31,48 @@ class _ProfileState extends State<Profile> {
   final SecureStorageService storage = SecureStorageService();
   bool _isToggling2FA = false;
 
+  @override
+  void initState() {
+    super.initState();
+    // Se espera al primer fotograma porque hasta que no esta montada la pantalla no se puede abrir una ventana sobre ella
+    if (widget.recoveredImage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _openProfileImageModal(context, initialImage: widget.recoveredImage);
+      });
+    }
+  }
+
   // Funcion para refrescar la UI
   void _refreshUI() {
     setState(() {});
   }
 
   // Funcion para activar o desactivar el 2FA
-  Future<void> _toggle2FA(bool value) async {
+  void _toggle2FA(bool value) {
     if (_isToggling2FA) return;
-
-    final bool confirm = await showConfirmationModal(
-      context,
-      title: value ? "Activar verificación en dos pasos" : "Desactivar verificación en dos pasos",
-      message: value
-          ? "¿Estás seguro de que deseas activar la verificación en dos pasos? Se te pedirá un código cada vez que inicies sesión."
-          : "¿Estás seguro de que deseas desactivar la verificación en dos pasos? Hacer esto reducirá la seguridad de tu cuenta.",
-    );
-    if (!confirm) return;
 
     setState(() => _isToggling2FA = true);
 
-    final endpoint = "${dotenv.env['USER_ENDPOINT'] ?? '/users/'}${widget.user.id}/";
-    final response = await api.requestToApi(
-      endpoint,
-      requireAuthentication: true,
-      op: ApiOptions.patch,
-      body: {'has_2FA': value},
+    Profile2FAFlow.start(
+      context,
+      widget.user,
+      value,
+      onSuccess: () => widget.user.has2FA = value,
+      onFinished: () {
+        if (mounted) setState(() => _isToggling2FA = false);
+      },
     );
-
-    if (!mounted) return;
-
-    if (response != null && response['error'] == null) {
-      setState(() {
-        widget.user.has2FA = value;
-        _isToggling2FA = false;
-      });
-    } 
-    else {
-      setState(() => _isToggling2FA = false);
-      showModal(context, "Error al actualizar la verificación en dos pasos. Inténtalo de nuevo.");
-    }
   }
 
   // Funcion para abrir la modal de edicion de foto de perfil
-  void _openProfileImageModal(BuildContext context) {
+  void _openProfileImageModal(BuildContext context, {PickedImage? initialImage}) {
     ProfileImageModal.show(
       context,
       currentImage: widget.user.profilePicture?.image,
+      initialImage: initialImage,
+      // Solo se llama con los cambios ya confirmados
       onSave: (PickedImage? image) async {
-        // Se muestra una modal para confirmar los cambios
-        final bool confirm = await showConfirmationModal(
-          context,
-          title: "Confirmar cambios",
-          message: image != null 
-              ? "¿Estás seguro de que deseas actualizar tu foto de perfil?" 
-              : "¿Estás seguro de que deseas eliminar tu foto de perfil actual?",
-        );
-
-        if (!confirm) return; // Si el usuario cancela, no se hace nada
-
         try {
           if (image != null) { // Se sube una nueva imagen
             final pictureName = await api.uploadProfileImage(widget.user.id, file: image.file, bytes: image.bytes);
@@ -102,7 +89,7 @@ class _ProfileState extends State<Profile> {
           
           if (!context.mounted) return;
           // Si no hay ningun error, se actualiza la foto de perfil
-          showModal(context, "Imagen de perfil actualizada correctamente", title: "Éxito", type: AlertType.success, backPage: true);
+          showModal(context, "Imagen de perfil actualizada correctamente", title: "Éxito", type: AlertType.success);
           
         } 
         catch (e) { // En caso de que haya algun error, se muestra un mensaje de error
@@ -127,6 +114,14 @@ class _ProfileState extends State<Profile> {
 
     // Si el usuario cancela, no se hace nada
     if (!confirm) return;
+
+    try {
+      // Se llama a la api para cerrar sesion en el servidor y que este invalide los tokens anteriores
+      final endpoint = "${dotenv.env['USER_ENDPOINT'] ?? '/users/'}${await storage.getElement('user_id')}${dotenv.env['LOGOUT_ENDPOINT'] ?? '/logout/'}";
+      await api.requestToApi(endpoint, requireAuthentication: true, op: ApiOptions.post, body: {});
+    }
+    catch (_) {
+    }
 
     // Se borran los datos del storage
     await storage.deleteAll();

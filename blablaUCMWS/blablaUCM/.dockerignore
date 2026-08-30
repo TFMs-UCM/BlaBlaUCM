@@ -1,0 +1,35 @@
+# Entornos y caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage/
+
+# Datos locales que NO deben entrar en la imagen
+media/
+staticfiles/
+logs/
+*.log
+
+# Secretos y entorno (se inyectan en runtime via env_file / volumenes)
+.env
+.env.*
+secrets/
+*firebase-adminsdk*.json
+firebase-service-account.json
+
+# Artefactos de Docker (no se necesitan dentro de la imagen)
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# IDE / VCS
+.vscode/
+.idea/
+.git/
+.gitignore

@@ -2,12 +2,15 @@ from rest_framework import serializers
 from travels.models import *
 from django.db import transaction
 from django.contrib.gis.geos import Point
-from api.serializers.user_serializer import UserSerializer, VehicleSerializer
+from api.errors import ErrorCodes
+from api.exceptions import CustomAPIException
+from api.serializers.base import AuditFieldsMixin
+from api.serializers.user_serializer import PublicUserSerializer, VehicleSerializer
 from django.utils.dateparse import parse_datetime
 from chats.models import Chat
 
 # Serializer para el modelo Travel
-class TravelSerializer(serializers.ModelSerializer):
+class TravelSerializer(AuditFieldsMixin, serializers.ModelSerializer):
 
     # Atributos para crear los puntos
     origin_lat = serializers.FloatField(write_only=True)
@@ -23,13 +26,28 @@ class TravelSerializer(serializers.ModelSerializer):
     
     pick_up_points = serializers.ListField(child=serializers.DictField(), write_only=True, required=False)
     deny_roles = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
-    
-    creation_user = UserSerializer(read_only=True)
-    vehicle = VehicleSerializer(read_only=True) 
-    
+    creation_user = PublicUserSerializer(read_only=True)
+    vehicle = VehicleSerializer(read_only=True)
+
     class Meta:
         model = Travel
         fields = "__all__"
+
+    def validate_vehicle_id(self, value):
+        request = self.context.get('request')
+
+        # Sin peticion en el contexto no hay contra quien comprobar, pasa al usar el serializer fuera de una vista (pruebas, scripts), y ahi no aplica
+        if request is None or not request.user.is_authenticated:
+            return value
+
+        # Se debe validar que el vehiculo no este borrado y que realmente pertenezca al usuario que hace la peticion
+        if value.id_user_id != request.user.pk or value.is_deleted:
+            raise CustomAPIException(
+                code=ErrorCodes.VEHICLE_DONT_EXIST,
+                message="El vehículo no existe o no es tuyo",
+                status_code=404
+            )
+        return value
 
     @transaction.atomic
     def create(self, validated_data):
@@ -130,33 +148,41 @@ class TravelSerializer(serializers.ModelSerializer):
         return travel
 
 #Serializer para el modelo TravelStates
-class TravelStatesSerializer(serializers.ModelSerializer):
+class TravelStatesSerializer(AuditFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = TravelStates
         fields = "__all__"
 
 # Serializer para el modelo RequestTravels
-class RequestTravelsSerializer(serializers.ModelSerializer):
-    id_travel = TravelSerializer(read_only=True) 
-    user = UserSerializer(read_only=True)
+class RequestTravelsSerializer(AuditFieldsMixin, serializers.ModelSerializer):
+    id_travel = TravelSerializer(read_only=True)
+    user = PublicUserSerializer(read_only=True)
+    validation_code = serializers.SerializerMethodField()
+
     class Meta:
         model = RequestTravels
         fields = "__all__"
 
+    def get_validation_code(self, obj):
+        request = self.context.get('request')
+        if request is not None and obj.user_id == request.user.pk:
+            return obj.validation_code
+        return None
+
 # Serializer para el modelo RequestStates
-class RequestStatesSerializer(serializers.ModelSerializer):
+class RequestStatesSerializer(AuditFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = RequestStates
         fields = "__all__"
 
 # Serializer para el modelo PickUpPoints
-class PickUpPointSerializer(serializers.ModelSerializer):
+class PickUpPointSerializer(AuditFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = PickUpPoints
         fields = "__all__"
 
 # Serializer para el modelo UsersDenied
-class UsersDeniedSerializer(serializers.ModelSerializer):
+class UsersDeniedSerializer(AuditFieldsMixin, serializers.ModelSerializer):
     class Meta:
         model = UsersDenied
         fields = "__all__"

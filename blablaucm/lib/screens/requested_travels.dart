@@ -115,7 +115,7 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
     // Se realiza la peticion a la api
     final response = await api.requestToApi(endpoint, queryParams: {"type": widget.type});
 
-    if (mounted && response != null) { // Si la api responde correctamente, se actualiza las variables
+    if (mounted && response != null && response['results'] is List) {
       setState(() {
         // Se mapean los resultados a la lista de viajes
         _travels = (response['results'] as List).map((req) {
@@ -147,7 +147,7 @@ class _PaginatedTravelListState extends State<PaginatedTravelList> {
     // Se pide a la api la seguiente pagina
     final response = await api.requestToApi(_nextUrl!); 
 
-    if (mounted && response != null) { // Si la api no falla, se actualizan las variables
+    if (mounted && response != null && response['results'] is List) {
       setState(() {
         List<RequestTravelModel> moreTravels = (response['results'] as List).map((req) {
           return RequestTravelModel(
