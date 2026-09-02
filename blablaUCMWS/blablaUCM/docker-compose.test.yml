@@ -1,0 +1,21 @@
+# Base de datos para pruebas unitarias y de integracion
+name: blablaucm-test
+
+services:
+  db-test:
+    image: postgis/postgis:18-3.6
+    environment:
+      POSTGRES_DB: blablaucm_test
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+    ports:
+      - "5433:5432"
+    tmpfs:
+      # Datos en memoria
+      # Postgres 18+: el directorio de datos vive bajo /var/lib/postgresql.
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d blablaucm_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 12

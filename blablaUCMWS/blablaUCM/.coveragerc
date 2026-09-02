@@ -1,0 +1,29 @@
+# Configuracion de cobertura. La lanza scripts/run_coverage.ps1 
+
+[run]
+branch = True
+source =
+    api
+    users
+    travels
+    chats
+    services
+omit =
+    */migrations/*
+    */tests/*
+    */tests.py
+    */__pycache__/*
+    manage.py
+    blablaUCM/asgi.py
+    blablaUCM/wsgi.py
+    blablaUCM/settings.py
+
+[report]
+show_missing = True
+skip_covered = False
+precision = 1
+# Falla el informe si la cobertura global baja de este umbral
+# fail_under = 0
+
+[html]
+directory = htmlcov

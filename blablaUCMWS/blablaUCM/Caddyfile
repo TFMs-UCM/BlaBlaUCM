@@ -1,0 +1,60 @@
+# Caddy: proxy inverso con HTTPS automatico para blablaUCM.
+#
+# Caddy pide el certificado a Let's Encrypt la primera vez que arranca y lo
+# renueva solo. Los requisitos son los de siempre para un certificado de dominio:
+#   - El DNS de {$DOMAIN} tiene que apuntar a la IP publica de esta maquina
+#   - Los puertos 80 y 443 tienen que estar abiertos desde Internet
+
+{
+	# Correo de contacto de Let's Encrypt: ahi llegan los avisos si un
+	# certificado esta a punto de caducar sin haberse renovado.
+	email {$ACME_EMAIL}
+}
+
+# --- Sitio principal -------------------------------------------------------
+{$DOMAIN:blablaucm.app} {
+	encode zstd gzip
+
+	# Las fotos de perfil se suben por la API, se establece el limite
+	request_body {
+		max_size 100MB
+	}
+
+	log {
+		output file /var/log/caddy/access.log
+		format json
+	}
+
+	handle / {
+		root * /srv/web
+		rewrite * /index.html
+		file_server
+	}
+
+	handle /icono6.png {
+		root * /srv/web
+		file_server
+	}
+
+	# El APK se sirve como descarga, no lo intenta abrir el navegador.
+	handle /blablaUCM.apk {
+		root * /srv/web
+		header Content-Disposition "attachment; filename=\"blablaUCM.apk\""
+		file_server
+	}
+
+	# Informe de cobertura (coverage.py)
+	handle /cobertura* {
+		root * /srv/web
+		file_server
+	}
+
+	# Resto de peticiones: la API
+	handle {
+		reverse_proxy web:8000
+	}
+}
+
+www.{$DOMAIN:blablaucm.app} {
+	redir https://{$DOMAIN:blablaucm.app}{uri} permanent
+}
